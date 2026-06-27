@@ -12,6 +12,7 @@ import type {
   SettingsUpdate,
   CheckResult,
 } from './types'
+import type { ProductHistory } from '../lib/history'
 
 export const getStatus = () => api.get<WatchStatus[]>('/status')
 export const getEvents = (limit = 50) =>
@@ -32,3 +33,5 @@ export const updateSettings = (body: SettingsUpdate) =>
   api.put<Settings>('/settings', body)
 export const testGotify = () =>
   api.post<{ delivered: boolean }>('/settings/test')
+export const getHistory = (store?: string): Promise<ProductHistory[]> =>
+  api.get<ProductHistory[]>(store ? `/history?store=${encodeURIComponent(store)}` : '/history')

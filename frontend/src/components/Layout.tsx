@@ -35,6 +35,7 @@ export function Layout() {
             </span>
             <nav className="flex items-center gap-1">
               <NavItem to="/" label="Dashboard" end />
+              <NavItem to="/history" label="History" />
               <NavItem to="/settings/watches" label="Watches" />
               <NavItem to="/settings/gotify" label="Gotify" />
               <NavItem to="/settings/stores" label="Stores" />
