@@ -1,0 +1,29 @@
+services:
+  stocktrack-api:
+    build: ./backend
+    env_file: .env
+    volumes:
+      - stocktrack-data:/data
+    expose:
+      - "9180"
+    ports:
+      - "9180:9180"   # optional host map — comment out if not needed for debug
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9180/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    restart: unless-stopped
+
+  stocktrack-ui:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-9181}:80"
+    depends_on:
+      stocktrack-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  stocktrack-data:

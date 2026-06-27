@@ -1,0 +1,33 @@
+# Environment & secrets
+.env
+.env.local
+*.local
+
+# Database & data
+*.db
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+backend/.venv/
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+
+# IDE / tooling
+.superpowers/
+
+# Pre-commit
+.pre-commit-cache/
+
+# internal design/planning docs — kept local, not published
+docs/superpowers/
+
+# Claude Code session / agent worktree data
+.claude/

@@ -1,0 +1,30 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        args: ["-r", "backend/stocktrack", "-ll"]
+        pass_filenames: false
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        files: ^backend/
+
+  - repo: local
+    hooks:
+      - id: forbid-environment-ips
+        name: forbid-environment-ips
+        language: python
+        entry: python scripts/forbid_environment_ips.py
+        types: [text]
+        pass_filenames: true
+        description: "Fail if any RFC1918 LAN IP literal is staged"
+        exclude: ^scripts/test_forbid_environment_ips\.py$
