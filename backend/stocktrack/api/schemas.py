@@ -143,3 +143,36 @@ class SettingsUpdate(BaseModel):
     failure_alert_after: Optional[int] = None
     heartbeat_hours: Optional[float] = None
     early_access_days: Optional[int] = None
+
+
+# ── History ────────────────────────────────────────────────────────────────
+
+class EpisodeOut(BaseModel):
+    started_ts: datetime
+    early_access_ts: Optional[datetime] = None
+    public_ts: Optional[datetime] = None
+    ended_ts: Optional[datetime] = None
+    ongoing: bool
+    buyable_seconds: Optional[int] = None
+    early_lead_seconds: Optional[int] = None
+    price: Optional[float] = None
+
+
+class ProductRefOut(BaseModel):
+    id: int
+    title: str
+    store: str
+    url: str
+    basket_url: str
+
+
+class HistorySummaryOut(BaseModel):
+    episodes: int
+    avg_buyable_seconds: Optional[float] = None
+    avg_early_lead_seconds: Optional[float] = None
+
+
+class ProductHistoryOut(BaseModel):
+    product: ProductRefOut
+    summary: HistorySummaryOut
+    episodes: list[EpisodeOut]

@@ -91,6 +91,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     from fastapi.middleware.cors import CORSMiddleware
     from stocktrack.api.routes.events import router as events_router
+    from stocktrack.api.routes.history import router as history_router
     from stocktrack.api.routes.settings import router as settings_router
     from stocktrack.api.routes.status import router as status_router
     from stocktrack.api.routes.stores import router as stores_router
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
 
     app.include_router(status_router, prefix="/api")
     app.include_router(events_router, prefix="/api")
+    app.include_router(history_router, prefix="/api")
     app.include_router(stores_router, prefix="/api")
     app.include_router(watches_router, prefix="/api")
     app.include_router(settings_router, prefix="/api")
