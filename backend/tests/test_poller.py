@@ -214,6 +214,23 @@ async def test_price_drop_not_sent_below_threshold(sessionmaker_):
         assert res.get("price_drops", 0) == 0
 
 
+async def test_delivery_persisted_on_product(sessionmaker_):
+    from sqlalchemy import select
+    from stocktrack.models import Product as PModel, Watch
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w); await s.commit(); wid = w.id
+    # baseline poll then a second in-stock poll carrying a delivery string
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", False, "", 100.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 100.0, delivery="Delivery by Mon 30 Jun (carrier)")])
+        p = (await s.execute(select(PModel))).scalar_one()
+        assert p.delivery == "Delivery by Mon 30 Jun (carrier)"
+
+
 async def test_price_drop_disabled_when_flag_off(sessionmaker_):
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="Meaco",

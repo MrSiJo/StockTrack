@@ -156,6 +156,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
         old_price = row.current_price
         row.title, row.brand, row.url = p.title, p.brand, p.url
         row.basket_url = p.basket_url
+        row.delivery = p.delivery
         row.current_price, row.last_checked, row.last_seen = p.price, now, now
 
         if curr == prev:

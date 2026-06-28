@@ -19,6 +19,7 @@ class Product(Base):
     url: Mapped[str] = mapped_column(default="")
     availability: Mapped[str] = mapped_column(default="oos")
     basket_url: Mapped[str] = mapped_column(default="")
+    delivery: Mapped[str] = mapped_column(default="")
     current_in_stock: Mapped[bool] = mapped_column(default=False)
     current_price: Mapped[Optional[float]] = mapped_column(default=None)
     available_since: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
