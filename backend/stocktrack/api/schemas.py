@@ -61,6 +61,7 @@ class ProductOut(BaseModel):
     brand: str
     availability: str
     basket_url: str
+    delivery: str
     current_in_stock: bool
     current_price: Optional[float]
     available_since: Optional[datetime]

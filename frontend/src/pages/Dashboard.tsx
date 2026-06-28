@@ -24,11 +24,28 @@ function formatRelative(iso: string | null): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-function ProductRow({ product }: { product: Product }) {
+function formatLeadTime(delivery: string): string {
+  if (!delivery) return '—'
+  return delivery.replace(/^Delivery by /, '')
+}
+
+// Cheapest first; products without a price sort to the end.
+function byPriceAsc(a: Product, b: Product): number {
+  const pa = a.current_price ?? Infinity
+  const pb = b.current_price ?? Infinity
+  return pa - pb
+}
+
+function ProductRow({
+  product,
+  showLeadTime,
+}: {
+  product: Product
+  showLeadTime: boolean
+}) {
   return (
     <tr className="hover:bg-gray-50">
-      <td className="py-3 pl-4 pr-3 text-sm text-gray-600">{product.store}</td>
-      <td className="py-3 px-3 text-sm font-medium text-gray-900">
+      <td className="py-3 pl-4 pr-3 text-sm font-medium text-gray-900">
         {product.title}
       </td>
       <td className="py-3 px-3">
@@ -37,6 +54,11 @@ function ProductRow({ product }: { product: Product }) {
       <td className="py-3 px-3 tabular-nums text-sm text-gray-700">
         {formatPrice(product.current_price)}
       </td>
+      {showLeadTime && (
+        <td className="py-3 px-3 text-sm text-gray-600">
+          {formatLeadTime(product.delivery)}
+        </td>
+      )}
       <td className="py-3 px-3 tabular-nums text-sm text-gray-500">
         {formatRelative(product.last_checked)}
       </td>
@@ -60,6 +82,9 @@ function WatchGroup({
 }) {
   const label = watch.label || watch.store
   const [checkNote, setCheckNote] = useState<string | null>(null)
+  const showLeadTime = watch.products.some((p) => p.delivery)
+  const sortedProducts = [...watch.products].sort(byPriceAsc)
+  const colCount = showLeadTime ? 6 : 5
 
   const handleCheck = async () => {
     setCheckNote(null)
@@ -101,9 +126,6 @@ function WatchGroup({
           <thead>
             <tr className="bg-white">
               <th className="py-2 pl-4 pr-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                Store
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 Product
               </th>
               <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -112,6 +134,11 @@ function WatchGroup({
               <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 Price
               </th>
+              {showLeadTime && (
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Lead time
+                </th>
+              )}
               <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 Checked
               </th>
@@ -121,17 +148,19 @@ function WatchGroup({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white">
-            {watch.products.length === 0 ? (
+            {sortedProducts.length === 0 ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={colCount}
                   className="px-4 py-4 text-center text-sm text-gray-400"
                 >
                   No products tracked yet — run a check or add filters.
                 </td>
               </tr>
             ) : (
-              watch.products.map((p) => <ProductRow key={p.id} product={p} />)
+              sortedProducts.map((p) => (
+                <ProductRow key={p.id} product={p} showLeadTime={showLeadTime} />
+              ))
             )}
           </tbody>
         </table>
@@ -154,7 +183,10 @@ export function Dashboard() {
     return result
   }
 
-  const hasEarlyAccess = watches.some((w) =>
+  // Disabled watches are hidden from the dashboard until re-enabled.
+  const visibleWatches = watches.filter((w) => w.enabled)
+
+  const hasEarlyAccess = visibleWatches.some((w) =>
     w.products.some((p) => p.availability === 'early'),
   )
 
@@ -192,8 +224,19 @@ export function Dashboard() {
             to start tracking.
           </p>
         </div>
+      ) : visibleWatches.length === 0 ? (
+        <div className="py-12 text-center text-gray-500">
+          <p className="text-base">All watches are disabled.</p>
+          <p className="mt-1 text-sm">
+            Enable one on the{' '}
+            <a href="/settings/watches" className="text-blue-600 hover:underline">
+              Watches
+            </a>{' '}
+            page to see it here.
+          </p>
+        </div>
       ) : (
-        watches.map((w) => (
+        visibleWatches.map((w) => (
           <WatchGroup key={w.id} watch={w} onCheckNow={handleCheckNow} />
         ))
       )}
