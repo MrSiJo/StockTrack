@@ -107,6 +107,7 @@ class StoreOut(BaseModel):
 class PreviewRequest(BaseModel):
     store: str
     url: str
+    kind: str = "listing"
     include_filter: str = ""
     exclude_filter: str = ""
 

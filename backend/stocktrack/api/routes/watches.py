@@ -17,6 +17,7 @@ from stocktrack.models import Event, Product, Watch
 from stocktrack.services import gotify
 from stocktrack.services.poller import build_status_summary, check_watch, matches
 from stocktrack.services.settings_service import get as get_setting
+from stocktrack.services.settings_service import truthy
 from stocktrack.services.settings_service import gotify_config
 from stocktrack.sites import available, get_handler, supported_kinds
 
@@ -38,10 +39,11 @@ async def preview_watch(
     if body.store not in available():
         raise HTTPException(status_code=422, detail=f"Unknown store: {body.store!r}")
     try:
-        handler = get_handler(body.store)
+        handler = get_handler(body.store, body.kind)
         raw = await asyncio.to_thread(handler.fetch, body.url)
         ea_days = int(await get_setting(session, "early_access_days", "30") or 30)
-        handler.configure(early_access_days=ea_days)
+        ao_member = truthy(await get_setting(session, "ao_member", "false"))
+        handler.configure(early_access_days=ea_days, ao_member=ao_member)
         parsed = handler.parse(raw)
         filtered = [
             p for p in parsed
