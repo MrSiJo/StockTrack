@@ -157,8 +157,11 @@ async def test_stores_returns_list(client):
     assert len(data) >= 1
     for s in data:
         assert "name" in s
-        assert "kind" in s
+        assert "kinds" in s
+        assert isinstance(s["kinds"], list)
         assert "supported" in s
+        assert "settings" in s
+        assert isinstance(s["settings"], list)
 
 
 async def test_stores_contains_ao_and_johnlewis(client):

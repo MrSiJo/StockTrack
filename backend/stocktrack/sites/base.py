@@ -42,6 +42,7 @@ class Product:
 class SiteHandler:
     name = "base"
     kind = "listing"
+    settings_spec: list[dict] = []
 
     def fetch(self, url: str) -> str:
         raise NotImplementedError

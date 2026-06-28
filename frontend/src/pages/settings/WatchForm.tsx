@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { PhaseBadge } from '../../components/PhaseBadge'
 import { BasketButton } from '../../components/BasketButton'
@@ -12,9 +12,17 @@ interface Props {
 export function WatchForm({ initial, onClose }: Props) {
   const { stores, addWatch, editWatch, preview } = useSettingsStore()
   const defaultStore = stores[0]
-
   const [store, setStore] = useState(initial?.store ?? defaultStore?.name ?? '')
-  const [kind, setKind] = useState(initial?.kind ?? defaultStore?.kind ?? 'listing')
+  const [kind, setKind] = useState(
+    initial?.kind ?? defaultStore?.kinds?.[0] ?? 'listing',
+  )
+  const kindsForStore =
+    stores.find((s) => s.name === store)?.kinds ?? ['listing']
+
+  useEffect(() => {
+    if (!kindsForStore.includes(kind)) setKind(kindsForStore[0])
+  }, [kindsForStore, kind])
+
   const [url, setUrl] = useState(initial?.url ?? '')
   const [label, setLabel] = useState(initial?.label ?? '')
   const [includeFilter, setIncludeFilter] = useState(
@@ -98,18 +106,36 @@ export function WatchForm({ initial, onClose }: Props) {
               Store
             </label>
             <select
-              value={`${store}::${kind}`}
+              value={store}
               onChange={(e) => {
-                const [n, k] = e.target.value.split('::')
-                setStore(n)
-                setKind(k)
+                const name = e.target.value
+                setStore(name)
+                const ks = stores.find((s) => s.name === name)?.kinds ?? ['listing']
+                if (!ks.includes(kind)) setKind(ks[0])
               }}
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
               required
             >
               {stores.map((s) => (
-                <option key={`${s.name}::${s.kind}`} value={`${s.name}::${s.kind}`}>
-                  {s.name} ({s.kind})
+                <option key={s.name} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-700">
+              Kind
+            </label>
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              required
+            >
+              {kindsForStore.map((k) => (
+                <option key={k} value={k}>
+                  {k}
                 </option>
               ))}
             </select>

@@ -10,22 +10,31 @@ from .base import Product, SiteHandler, fetch_html
 OOS_STATE = "outofstock"
 BASKET_URL = "https://ao.com/Build_Shopping_Basket.aspx?items={code}:1"
 EARLY_ACCESS_DAYS = int(os.environ.get("EARLY_ACCESS_DAYS", "30"))
+AO_SETTINGS = [{"key": "ao_member",
+                "label": "I'm an AO member (track AO member price)",
+                "type": "bool", "default": False}]
 
 _MONTHS = {m.lower(): i for i, m in enumerate(
     ["", "January", "February", "March", "April", "May", "June",
      "July", "August", "September", "October", "November", "December"])}
 
-class AoHandler(SiteHandler):
-    name = "ao"
-    _early_access_days = None  # set via configure(); None → fall back to EARLY_ACCESS_DAYS
-    _ao_member = False  # set via configure()
+class _AoBase(SiteHandler):
+    """Shared AO config: early-access threshold + membership flag."""
+    _early_access_days = None  # None → fall back to EARLY_ACCESS_DAYS
+    _ao_member = False
+    settings_spec = AO_SETTINGS
 
     def configure(self, *, early_access_days=None, ao_member=None, **_):
-        """Store the early-access threshold and membership flag for parse."""
         if early_access_days is not None:
             self._early_access_days = int(early_access_days)
         if ao_member is not None:
             self._ao_member = bool(ao_member)
+
+
+class AoHandler(_AoBase):
+    name = "ao"
+    kind = "listing"
+    # configure(), _early_access_days, _ao_member now inherited from _AoBase
 
     def fetch(self, url):
         return fetch_html(url)
@@ -123,17 +132,10 @@ def _delivery_text(p):
 handler = AoHandler()
 
 
-class AoProductHandler(SiteHandler):
+class AoProductHandler(_AoBase):
     name = "ao"
     kind = "product"
-    _early_access_days = None
-    _ao_member = False
-
-    def configure(self, *, early_access_days=None, ao_member=None, **_):
-        if early_access_days is not None:
-            self._early_access_days = int(early_access_days)
-        if ao_member is not None:
-            self._ao_member = bool(ao_member)
+    # configure(), _early_access_days, _ao_member now inherited from _AoBase
 
     def fetch(self, url):
         return fetch_html(url)

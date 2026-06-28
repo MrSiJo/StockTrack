@@ -92,10 +92,18 @@ export interface WatchUpdate {
 
 // ── Stores (GET /api/stores) ────────────────────────────────────────────────
 
+export interface StoreSetting {
+  key: string
+  label: string
+  type: string                 // 'bool' | 'int' | 'float'
+  default: boolean | number
+}
+
 export interface Store {
   name: string
-  kind: string
+  kinds: string[]
   supported: boolean
+  settings: StoreSetting[]
 }
 
 // ── Preview (POST /api/watches/preview) ────────────────────────────────────

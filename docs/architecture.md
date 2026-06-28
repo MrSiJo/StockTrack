@@ -47,7 +47,8 @@ dev server on `:5173`).
   row but the scheduler currently drives all watches off the one global tick.
 - **Site handlers** — one `SiteHandler` subclass per store
   (`sites/ao.py`, `sites/johnlewis.py`), registered in `sites/__init__.py`.
-  Each maps a store's listing HTML/JSON to the shared `Product` dataclass.
+  Each maps a store's listing HTML/JSON to the shared `Product` dataclass. See
+  [adding-a-store](./adding-a-store.md) for the handler contract and a checklist.
 - **Notifications** — a delivery-safe Gotify sender (`services/gotify.py`).
 - **History** — pure episode reconstruction over the event log
   (`services/history.py`), exposed read-only at `GET /api/history`.

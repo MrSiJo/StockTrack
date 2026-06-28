@@ -76,11 +76,22 @@ def test_registry():
     assert get_handler("ao").name == "ao"           # defaults to kind="listing"
     assert get_handler("ao", "listing").kind == "listing"
     assert get_handler("ao", "product").kind == "product"
-    entries = stores()
-    listing = [s for s in entries if s["name"] == "ao" and s["kind"] == "listing"]
-    assert listing and listing[0]["supported"] is True
-    product = [s for s in entries if s["name"] == "ao" and s["kind"] == "product"]
-    assert product and product[0]["supported"] is True
+    entries = {s["name"]: s for s in stores()}
+    assert entries["ao"]["kinds"] == ["listing", "product"]
+    assert entries["ao"]["supported"] is True
+    assert entries["johnlewis"]["kinds"] == ["listing"]
+
+
+def test_stores_single_entity_with_settings():
+    entries = {s["name"]: s for s in stores()}
+    assert set(entries) == {"ao", "johnlewis"}
+    ao_entry = entries["ao"]
+    assert ao_entry["kinds"] == ["listing", "product"]   # sorted, deduped
+    assert ao_entry["supported"] is True
+    ao_keys = {s["key"] for s in ao_entry["settings"]}
+    assert ao_keys == {"ao_member"}                       # merged, deduped
+    assert entries["johnlewis"]["kinds"] == ["listing"]
+    assert entries["johnlewis"]["settings"] == []
 
 
 def test_ao_product_parses_single_product():
@@ -127,3 +138,30 @@ def test_ao_product_blob_brace_in_string():
     assert len(prods) == 1
     assert prods[0].price == 519.0
     assert prods[0].code == "999001"
+
+
+def test_ao_handlers_share_settings_spec():
+    assert ao.AoHandler().settings_spec == ao.AO_SETTINGS
+    assert ao.AoProductHandler().settings_spec == ao.AO_SETTINGS
+    keys = {s["key"] for s in ao.AO_SETTINGS}
+    assert keys == {"ao_member"}
+    member = ao.AO_SETTINGS[0]
+    assert member["type"] == "bool" and member["default"] is False
+
+
+def test_handler_kinds_explicit():
+    from stocktrack.sites import johnlewis
+    assert ao.AoHandler.kind == "listing"
+    assert ao.AoProductHandler.kind == "product"
+    assert johnlewis.JohnLewisHandler.kind == "listing"
+
+
+def test_base_settings_spec_defaults_empty():
+    from stocktrack.sites import johnlewis
+    assert johnlewis.JohnLewisHandler().settings_spec == []
+
+
+def test_aobase_not_registered_as_store():
+    from stocktrack.sites import available, stores
+    assert sorted(available()) == ["ao", "johnlewis"]
+    assert {s["name"] for s in stores()} == {"ao", "johnlewis"}
