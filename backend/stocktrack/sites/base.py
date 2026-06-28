@@ -113,6 +113,34 @@ def _fetch_via_curl_cffi(url: str) -> str:
             break
     raise last_err if last_err else RuntimeError(f"no fetch attempt for {url}")
 
+def post_json(url: str, payload: dict, headers: Optional[dict] = None) -> dict:
+    """POST a JSON body through the curl_cffi impersonation layer.
+
+    Mirrors _fetch_via_curl_cffi's bot-wall fallback. Returns parsed JSON on
+    HTTP 200; raises RuntimeError otherwise. Used by handlers whose stock needs
+    a second (POST) call, e.g. City Plumbing's productEligibility GraphQL.
+    """
+    if not _curl_cffi_available():
+        raise RuntimeError("curl_cffi required for JSON POST but unavailable")
+    from curl_cffi import requests as creq
+    hdrs = {"content-type": "application/json", "accept": "application/json",
+            **(headers or {})}
+    last_err = None
+    for target in _impersonation_targets():
+        try:
+            with creq.Session() as sess:
+                resp = sess.post(url, json=payload, headers=hdrs,
+                                 impersonate=target, timeout=30)
+        except Exception as e:  # noqa: BLE001
+            last_err = RuntimeError(f"curl_cffi POST impersonate={target!r}: {e!r}")
+            continue
+        if resp.status_code == 200:
+            return resp.json()
+        last_err = RuntimeError(f"HTTP {resp.status_code} from {url} (impersonate={target})")
+        if resp.status_code not in _BOT_WALL_STATUSES:
+            break
+    raise last_err if last_err else RuntimeError(f"no POST attempt for {url}")
+
 def fetch_via_curl(url: str, headers: Optional[dict] = None) -> str:
     headers = headers or DEFAULT_HEADERS
     if not shutil.which("curl"):
