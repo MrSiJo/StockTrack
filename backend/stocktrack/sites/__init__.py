@@ -1,5 +1,5 @@
 """Site handler registry, keyed by (store name, kind)."""
-from . import ao, johnlewis
+from . import ao, cityplumbing, johnlewis
 from .base import SiteHandler
 
 _HANDLERS: dict[tuple[str, str], SiteHandler] = {
@@ -7,6 +7,7 @@ _HANDLERS: dict[tuple[str, str], SiteHandler] = {
         ao.handler,
         ao.product_handler,
         johnlewis.handler,
+        cityplumbing.handler,
     )
 }
 

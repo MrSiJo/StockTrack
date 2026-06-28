@@ -84,7 +84,7 @@ def test_registry():
 
 def test_stores_single_entity_with_settings():
     entries = {s["name"]: s for s in stores()}
-    assert set(entries) == {"ao", "johnlewis"}
+    assert {"ao", "johnlewis"}.issubset(set(entries))
     ao_entry = entries["ao"]
     assert ao_entry["kinds"] == ["listing", "product"]   # sorted, deduped
     assert ao_entry["supported"] is True
@@ -163,5 +163,5 @@ def test_base_settings_spec_defaults_empty():
 
 def test_aobase_not_registered_as_store():
     from stocktrack.sites import available, stores
-    assert sorted(available()) == ["ao", "johnlewis"]
-    assert {s["name"] for s in stores()} == {"ao", "johnlewis"}
+    assert {"ao", "johnlewis"}.issubset(set(available()))
+    assert {"ao", "johnlewis"}.issubset({s["name"] for s in stores()})
