@@ -141,9 +141,9 @@ export function HistoryPage() {
             className="rounded-md border border-gray-300 bg-white py-1.5 pl-3 pr-8 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="">All</option>
-            {stores.map((s) => (
-              <option key={s.name} value={s.name}>
-                {s.name}
+            {[...new Set(stores.map((s) => s.name))].map((name) => (
+              <option key={name} value={name}>
+                {name}
               </option>
             ))}
           </select>

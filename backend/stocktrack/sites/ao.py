@@ -163,23 +163,14 @@ def _extract_product_blob(raw):
     i = raw.find("window.digitalData.page.product = Object.assign(")
     if i < 0:
         raise RuntimeError("AO product blob not found - PDP layout changed?")
-    seg = raw[i:i + 8000]
-    lit = seg.find("{", seg.find(","))
-    if lit < 0:
+    comma = raw.find(",", i)
+    if comma < 0:
         raise RuntimeError("AO product blob literal not found")
-    depth = 0
-    end = None
-    for j in range(lit, len(seg)):
-        if seg[j] == "{":
-            depth += 1
-        elif seg[j] == "}":
-            depth -= 1
-            if depth == 0:
-                end = j + 1
-                break
-    if end is None:
-        raise RuntimeError("AO product blob literal not terminated")
-    return json.loads(seg[lit:end])
+    lit_index = raw.find("{", comma)
+    if lit_index < 0:
+        raise RuntimeError("AO product blob literal not found")
+    obj, _ = json.JSONDecoder().raw_decode(raw, lit_index)
+    return obj
 
 
 def _select_price(blob, ao_member):

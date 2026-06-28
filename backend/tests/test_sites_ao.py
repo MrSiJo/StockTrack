@@ -113,3 +113,17 @@ def test_ao_product_in_stock_is_public():
     p = h.parse(raw)[0]
     assert p.in_stock is True
     assert p.availability == "public"
+
+
+def test_ao_product_blob_brace_in_string():
+    """Parser must not fail when a JSON string value contains literal braces."""
+    raw = FIX_PRODUCT.read_text(encoding="utf-8").replace(
+        '"stockStatus": "out of stock"',
+        '"stockStatus": "out of stock", "promoLabel": "Save {now} on this {deal}"',
+    )
+    h = ao.AoProductHandler()
+    h.configure(ao_member=False)
+    prods = h.parse(raw)
+    assert len(prods) == 1
+    assert prods[0].price == 519.0
+    assert prods[0].code == "999001"
