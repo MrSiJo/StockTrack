@@ -7,6 +7,7 @@ export function StoresPage() {
   const { stores, settings, loading, fetchStores, fetchSettings, saveSettings } =
     useSettingsStore()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
 
   useEffect(() => {
     fetchStores()
@@ -95,14 +96,16 @@ export function StoresPage() {
                             ) : (
                               <input
                                 type="number"
-                                value={Number(
-                                  settingValue(cfg.key) ?? cfg.default,
-                                )}
+                                value={drafts[cfg.key] ?? String(settingValue(cfg.key) ?? cfg.default)}
                                 onChange={(e) =>
-                                  saveSettings({
-                                    [cfg.key]: Number(e.target.value),
-                                  } as SettingsUpdate)
+                                  setDrafts((d) => ({ ...d, [cfg.key]: e.target.value }))
                                 }
+                                onBlur={() => {
+                                  const n = Number(drafts[cfg.key])
+                                  if (drafts[cfg.key] !== undefined && Number.isFinite(n))
+                                    saveSettings({ [cfg.key]: n } as SettingsUpdate)
+                                  setDrafts((d) => { const { [cfg.key]: _omit, ...rest } = d; return rest })
+                                }}
                                 className="w-24 rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
                               />
                             )}

@@ -159,3 +159,9 @@ def test_handler_kinds_explicit():
 def test_base_settings_spec_defaults_empty():
     from stocktrack.sites import johnlewis
     assert johnlewis.JohnLewisHandler().settings_spec == []
+
+
+def test_aobase_not_registered_as_store():
+    from stocktrack.sites import available, stores
+    assert sorted(available()) == ["ao", "johnlewis"]
+    assert {s["name"] for s in stores()} == {"ao", "johnlewis"}

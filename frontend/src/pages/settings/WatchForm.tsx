@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { PhaseBadge } from '../../components/PhaseBadge'
 import { BasketButton } from '../../components/BasketButton'
@@ -18,6 +18,11 @@ export function WatchForm({ initial, onClose }: Props) {
   )
   const kindsForStore =
     stores.find((s) => s.name === store)?.kinds ?? ['listing']
+
+  useEffect(() => {
+    if (!kindsForStore.includes(kind)) setKind(kindsForStore[0])
+  }, [kindsForStore, kind])
+
   const [url, setUrl] = useState(initial?.url ?? '')
   const [label, setLabel] = useState(initial?.label ?? '')
   const [includeFilter, setIncludeFilter] = useState(
