@@ -90,14 +90,20 @@ Two further event kinds fire **independently of phase changes**:
   The alert shows current stock status and delivery info regardless of phase.
 - **`lead_time`** — an already-in-stock product's delivery ETA string changes
   (detected by string comparison of the persisted `Product.delivery` value,
-  e.g. `"Delivery by Thu 3 Jul"` → `"Delivery by Fri 4 Jul"`). Only fires
-  when the product was and remains in stock (not on a phase change).
+  e.g. `"Delivery by Thu 3 Jul"` → `"Delivery by Fri 4 Jul"`). It fires
+  whenever the product was and remains in stock (both the previous and current
+  phase are non-`oos`) and the persisted delivery string changed — independent
+  of the stock-transition checks, though it can coincide with a phase change
+  (e.g., `early → public` with simultaneous delivery-date shift).
 
 All event kinds are **delivery-safe**: the event row (and any field updated by
-the transition) is persisted *only if the Gotify push succeeded*. If the alert
-fails, the previous state is restored so the change is retried on the next tick
-rather than silently lost. This means there is at most one event per real
-transition, which the history reconstruction relies on.
+the transition) is persisted *only if the Gotify push succeeded*. For
+stock-phase, price-drop, and lead-time alerts, if the push fails the previous
+state is restored so the change is retried on the next tick. For `new_product`
+alerts, a failed push leaves the row in an `oos` baseline state (no Event
+created); the product then surfaces on a later tick via a normal phase-change
+event rather than being retried as a new-product alert. This means there is at
+most one event per real transition, which the history reconstruction relies on.
 
 ## Episode reconstruction
 
