@@ -137,3 +137,20 @@ async def test_settings_ao_member_and_price_drop_roundtrip(client):
     assert body["price_drop_min_pct"] == 8
     assert body["price_drop_min_abs"] == 10
     assert body["price_drop_priority"] == 7
+
+
+async def test_str_store_settings_roundtrip(client):
+    # default empty
+    r = await client.get("/api/settings")
+    body = r.json()
+    assert body["cp_delivery_postcode"] == ""
+    assert body["cp_collection_branch_id"] == ""
+    assert body["lead_time_priority"] == 5
+    # update + read back
+    await client.put("/api/settings", json={
+        "cp_delivery_postcode": "ZZ1 1ZZ",
+        "cp_collection_branch_id": "9999",
+    })
+    body2 = (await client.get("/api/settings")).json()
+    assert body2["cp_delivery_postcode"] == "ZZ1 1ZZ"
+    assert body2["cp_collection_branch_id"] == "9999"

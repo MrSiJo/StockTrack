@@ -63,6 +63,9 @@ async def seed_from_env(session, env, secret_key: str) -> None:
         "price_drop_min_pct": (str(env.price_drop_min_pct), False),
         "price_drop_min_abs": (str(env.price_drop_min_abs), False),
         "price_drop_priority": (str(env.price_drop_priority), False),
+        "lead_time_priority": (str(env.lead_time_priority), False),
+        "cp_delivery_postcode": (env.cp_delivery_postcode, False),
+        "cp_collection_branch_id": (env.cp_collection_branch_id, False),
     }
     for key, (value, is_secret) in defaults.items():
         existing = await session.get(Setting, key)

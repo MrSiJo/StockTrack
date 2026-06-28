@@ -30,6 +30,9 @@ _PLAIN_SETTING_KEYS = [
     "price_drop_min_pct",
     "price_drop_min_abs",
     "price_drop_priority",
+    "lead_time_priority",
+    "cp_delivery_postcode",
+    "cp_collection_branch_id",
 ]
 
 
@@ -55,6 +58,9 @@ async def _read_settings(session: AsyncSession, secret_key: str) -> SettingsOut:
         price_drop_min_pct=float(await get(session, "price_drop_min_pct", "5") or 5),
         price_drop_min_abs=float(await get(session, "price_drop_min_abs", "5") or 5),
         price_drop_priority=int(await get(session, "price_drop_priority", "6") or 6),
+        lead_time_priority=int(await get(session, "lead_time_priority", "5") or 5),
+        cp_delivery_postcode=await get(session, "cp_delivery_postcode", "") or "",
+        cp_collection_branch_id=await get(session, "cp_collection_branch_id", "") or "",
     )
 
 

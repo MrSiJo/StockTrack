@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     price_drop_min_pct: float = 5
     price_drop_min_abs: float = 5
     price_drop_priority: int = 6
+    lead_time_priority: int = 5
+    cp_delivery_postcode: str = ""
+    cp_collection_branch_id: str = ""
     seed_ao_url: str = ""
     seed_jl_url: str = ""
 
