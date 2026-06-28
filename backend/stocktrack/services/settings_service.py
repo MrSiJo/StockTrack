@@ -1,6 +1,5 @@
 """DB-backed settings with encrypted secrets + env seed."""
 from typing import Optional
-from sqlalchemy import select
 from stocktrack.crypto import decrypt, encrypt
 from stocktrack.models.setting import Setting
 

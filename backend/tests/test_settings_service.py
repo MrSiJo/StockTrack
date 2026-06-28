@@ -1,5 +1,3 @@
-import pytest
-import pytest_asyncio
 from stocktrack.services.settings_service import get, get_secret, set_value, seed_from_env, gotify_config
 from stocktrack.bootstrap import Settings, get_settings
 

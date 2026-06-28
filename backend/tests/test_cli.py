@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import patch, MagicMock
 from stocktrack.cli import main
 from stocktrack.sites.base import Product as P

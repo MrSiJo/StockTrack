@@ -1,5 +1,4 @@
 import os
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault("APP_SECRET_KEY", "t" * 32)
@@ -144,7 +143,6 @@ async def test_check_watch_404(client):
 
 async def test_check_notify_true_sends_one_status_push(client, sessionmaker_):
     """notify=true sends exactly one status push; title contains 'status'; notified=true."""
-    from unittest.mock import call
 
     from stocktrack.models import Product, Watch
     from stocktrack.services.settings_service import set_value

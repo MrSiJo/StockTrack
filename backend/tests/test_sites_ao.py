@@ -1,6 +1,5 @@
 from pathlib import Path
 import datetime
-from unittest.mock import patch
 from stocktrack.sites import ao, available, get_handler, stores
 
 FIX = Path(__file__).parent / "fixtures" / "ao_listing.html"
@@ -45,7 +44,6 @@ def test_configure_changes_early_access_threshold():
     A delivery 20 days out is 'public' at threshold 30 (20 is NOT > 30)
     but 'early' at threshold 10 (20 IS > 10).
     """
-    import datetime
     h = ao.AoHandler()
     today = datetime.date.today()
     future = today + datetime.timedelta(days=20)

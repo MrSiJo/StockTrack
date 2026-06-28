@@ -135,5 +135,5 @@ def fetch_via_curl(url: str, headers: Optional[dict] = None) -> str:
 
 def _fetch_via_urllib(url: str, headers: dict) -> str:
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310
         return resp.read().decode("utf-8", "replace")

@@ -2,8 +2,6 @@
 import argparse
 import asyncio
 import logging
-import os
-import sys
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 log = logging.getLogger("stocktrack.cli")
@@ -11,7 +9,6 @@ log = logging.getLogger("stocktrack.cli")
 
 async def _run_check(store: str, url: str, include: str, exclude: str) -> dict:
     from stocktrack.sites import get_handler
-    from stocktrack.sites.base import Product as SiteProduct
 
     handler = get_handler(store)
 

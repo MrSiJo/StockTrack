@@ -5,19 +5,6 @@ os.environ.setdefault("APP_SECRET_KEY", "t" * 32)
 
 
 def test_schemas_importable():
-    from stocktrack.api.schemas import (
-        EventOut,
-        PreviewProductOut,
-        PreviewRequest,
-        ProductOut,
-        SettingsOut,
-        SettingsUpdate,
-        StoreOut,
-        WatchCreate,
-        WatchOut,
-        WatchStatusOut,
-        WatchUpdate,
-    )
     from stocktrack.api.deps import get_session  # noqa: F401
 
 

@@ -27,4 +27,4 @@ repos:
         types: [text]
         pass_filenames: true
         description: "Fail if any RFC1918 LAN IP literal is staged"
-        exclude: ^scripts/test_forbid_environment_ips\.py$
+        exclude: ^scripts/(forbid_environment_ips|test_forbid_environment_ips)\.py$
