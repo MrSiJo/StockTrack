@@ -104,21 +104,23 @@ class CityPlumbingHandler(SiteHandler):
     name = "cityplumbing"
     kind = "listing"
     settings_spec = CP_SETTINGS
-    _delivery_postcode = ""
-    _collection_branch_id = ""
 
-    def configure(self, *, delivery_postcode=None, collection_branch_id=None, **_):
-        if delivery_postcode is not None:
-            self._delivery_postcode = str(delivery_postcode)
-        if collection_branch_id is not None:
-            self._collection_branch_id = str(collection_branch_id)
+    def __init__(self):
+        self._delivery_postcode = ""
+        self._collection_branch_id = ""
+
+    def configure(self, *, cp_delivery_postcode=None, cp_collection_branch_id=None, **_):
+        if cp_delivery_postcode is not None:
+            self._delivery_postcode = str(cp_delivery_postcode)
+        if cp_collection_branch_id is not None:
+            self._collection_branch_id = str(cp_collection_branch_id)
 
     def fetch(self, url):
-        html = fetch_html(url)
-        products = _extract_products(html)
         if not self._delivery_postcode:
             raise RuntimeError(
                 "City Plumbing needs a delivery postcode - set it in Stores settings")
+        html = fetch_html(url)
+        products = _extract_products(html)
         items = [{"productCode": p["code"], "quantity": 1} for p in products]
         payload = {
             "operationName": "productEligibility",

@@ -12,7 +12,7 @@ async def _run_check(store: str, url: str, include: str, exclude: str,
     from stocktrack.sites import get_handler
 
     handler = get_handler(store)
-    handler.configure(delivery_postcode=postcode, collection_branch_id=branch)
+    handler.configure(cp_delivery_postcode=postcode, cp_collection_branch_id=branch)
     log.info("Fetching %s ...", url)
     raw = await asyncio.to_thread(handler.fetch, url)
 

@@ -163,5 +163,9 @@ def test_base_settings_spec_defaults_empty():
 
 def test_aobase_not_registered_as_store():
     from stocktrack.sites import available, stores
-    assert {"ao", "johnlewis"}.issubset(set(available()))
-    assert {"ao", "johnlewis"}.issubset({s["name"] for s in stores()})
+    from stocktrack.sites.ao import _AoBase
+    avail = set(available())
+    assert avail == {"ao", "cityplumbing", "johnlewis"}
+    assert _AoBase().name not in avail
+    store_names = {s["name"] for s in stores()}
+    assert store_names == {"ao", "cityplumbing", "johnlewis"}

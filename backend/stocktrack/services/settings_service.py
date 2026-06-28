@@ -39,6 +39,7 @@ async def set_value(session, key: str, value: str, *, is_secret: bool = False,
         row.value = stored
         row.is_secret = is_secret
 
+
 def _coerce(value, type_: str):
     if type_ == "bool":
         return truthy(value)

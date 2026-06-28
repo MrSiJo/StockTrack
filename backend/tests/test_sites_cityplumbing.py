@@ -58,6 +58,27 @@ def test_registered():
 
 
 def test_missing_postcode_raises():
-    cp.handler.configure(delivery_postcode="", collection_branch_id="4207")
-    with pytest.raises(RuntimeError):
+    # Guard fires before any network I/O — postcode empty → RuntimeError immediately.
+    cp.handler.configure(cp_delivery_postcode="", cp_collection_branch_id="4207")
+    with pytest.raises(RuntimeError, match="delivery postcode"):
         cp.handler.fetch("https://www.cityplumbing.co.uk/c/whatever")
+
+
+async def test_store_config_kwargs_wires_cp_handler(sessionmaker_):
+    """store_config_kwargs builds the correct kwargs and configure() applies them."""
+    from stocktrack.services.settings_service import set_value, store_config_kwargs
+
+    async with sessionmaker_() as s:
+        await set_value(s, "cp_delivery_postcode", "SW1A 1AA")
+        await set_value(s, "cp_collection_branch_id", "9001")
+        await s.commit()
+        kwargs = await store_config_kwargs(s, cp.handler)
+
+    # store_config_kwargs also injects early_access_days — configure must absorb it.
+    assert kwargs["cp_delivery_postcode"] == "SW1A 1AA"
+    assert kwargs["cp_collection_branch_id"] == "9001"
+    assert "early_access_days" in kwargs
+
+    cp.handler.configure(**kwargs)
+    assert cp.handler._delivery_postcode == "SW1A 1AA"
+    assert cp.handler._collection_branch_id == "9001"
