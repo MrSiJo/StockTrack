@@ -59,17 +59,38 @@ async def test_public_then_oos_with_duration(sessionmaker_):
         assert kinds == ["public", "oos"]
 
 
+async def test_first_poll_is_silent_baseline(sessionmaker_):
+    from sqlalchemy import select
+    from stocktrack.models import Event, Product as PModel, Watch
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w); await s.commit(); wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0)])
+        assert sent == []                          # no alert burst
+        assert res["public"] == 0
+        evs = (await s.execute(select(Event))).scalars().all()
+        assert evs == []                           # no events on baseline
+        p = (await s.execute(select(PModel))).scalar_one()
+        assert p.current_in_stock is True and p.current_price == 100.0  # state recorded
+        assert p.available_since is not None
+
+
 async def test_failed_public_send_does_not_advance_state(sessionmaker_):
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="Meaco", exclude_filter="")
-        s.add(w)
-        await s.commit()
-        wid = w.id
+        s.add(w); await s.commit(); wid = w.id
+    # baseline OOS (silent)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Meaco 12K", False, "Meaco", 519.0)])
+    # 2nd poll: in stock but send fails -> state not advanced
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
         await _run(s, w, [P("A", "Meaco 12K", True, "Meaco", 519.0)], sends_ok=False)
         p = (await s.execute(select(Product))).scalar_one()
-        assert p.current_in_stock is False  # not advanced
+        assert p.current_in_stock is False
         assert p.available_since is None
 
 

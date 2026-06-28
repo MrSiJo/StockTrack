@@ -132,6 +132,8 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     rows = {r.code: r for r in (await session.execute(
         select(Product).where(Product.watch_id == watch.id))).scalars().all()}
 
+    is_first_poll = len(rows) == 0
+
     cfg = await gotify_config(session, secret_key)
     restock_priority = int(await get_setting(session, "restock_priority", "8") or 8)
     oos_priority = int(await get_setting(session, "oos_priority", "4") or 4)
@@ -142,6 +144,20 @@ async def check_watch(session, watch, *, secret_key, handler=None,
 
     for p in parsed:
         row = rows.get(p.code)
+        if is_first_poll:
+            if row is None:
+                row = Product(watch_id=watch.id, store=watch.store, code=p.code,
+                              first_seen=now)
+                session.add(row)
+            curr = _phase(p.availability, p.in_stock)
+            row.title, row.brand, row.url = p.title, p.brand, p.url
+            row.basket_url, row.delivery = p.basket_url, p.delivery
+            row.current_price, row.last_checked, row.last_seen = p.price, now, now
+            row.availability = curr
+            row.current_in_stock = curr != "oos"
+            row.available_since = now if curr != "oos" else None
+            continue
+
         if row is None:
             row = Product(watch_id=watch.id, store=watch.store, code=p.code,
                           first_seen=now)
