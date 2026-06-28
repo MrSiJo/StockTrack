@@ -136,6 +136,10 @@ class SettingsOut(BaseModel):
     failure_alert_after: int
     heartbeat_hours: float
     early_access_days: int
+    ao_member: bool
+    price_drop_min_pct: float
+    price_drop_min_abs: float
+    price_drop_priority: int
 
 
 class SettingsUpdate(BaseModel):
@@ -149,6 +153,10 @@ class SettingsUpdate(BaseModel):
     failure_alert_after: Optional[int] = None
     heartbeat_hours: Optional[float] = None
     early_access_days: Optional[int] = None
+    ao_member: Optional[bool] = None
+    price_drop_min_pct: Optional[float] = None
+    price_drop_min_abs: Optional[float] = None
+    price_drop_priority: Optional[int] = None
 
 
 # ── History ────────────────────────────────────────────────────────────────

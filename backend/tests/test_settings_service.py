@@ -47,3 +47,27 @@ async def test_gotify_config(sessionmaker_):
         assert cfg["url"] == "https://gotify.example"
         assert cfg["token"] == "mytoken"
         assert cfg["retries"] == 3
+
+
+async def test_truthy_helper():
+    from stocktrack.services.settings_service import truthy
+    assert truthy("true") and truthy("True") and truthy("1") and truthy("yes")
+    assert not truthy("false") and not truthy("") and not truthy(None) and not truthy("0")
+
+
+async def test_seed_adds_price_drop_and_member_defaults(sessionmaker_):
+    from types import SimpleNamespace
+    from stocktrack.services.settings_service import get, seed_from_env
+    env = SimpleNamespace(
+        gotify_url="", gotify_token="", gotify_priority=7, restock_priority=8,
+        oos_priority=4, gotify_send_retries=3, default_interval_seconds=300,
+        failure_alert_after=6, heartbeat_hours=0, early_access_days=30,
+        ao_member=False, price_drop_min_pct=5, price_drop_min_abs=5,
+        price_drop_priority=6,
+    )
+    async with sessionmaker_() as s:
+        await seed_from_env(s, env, "k" * 32)
+        assert await get(s, "ao_member") == "false"
+        assert await get(s, "price_drop_min_pct") == "5"
+        assert await get(s, "price_drop_min_abs") == "5"
+        assert await get(s, "price_drop_priority") == "6"

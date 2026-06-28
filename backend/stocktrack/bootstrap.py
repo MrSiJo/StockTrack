@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     heartbeat_hours: float = 0
     default_interval_seconds: int = 300
     early_access_days: int = 30
+    ao_member: bool = False
+    price_drop_min_pct: float = 5
+    price_drop_min_abs: float = 5
+    price_drop_priority: int = 6
     seed_ao_url: str = ""
     seed_jl_url: str = ""
 

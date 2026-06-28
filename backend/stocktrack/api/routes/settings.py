@@ -12,6 +12,7 @@ from stocktrack.services.settings_service import (
     get_secret,
     gotify_config,
     set_value,
+    truthy,
 )
 
 router = APIRouter()
@@ -26,6 +27,9 @@ _PLAIN_SETTING_KEYS = [
     "failure_alert_after",
     "heartbeat_hours",
     "early_access_days",
+    "price_drop_min_pct",
+    "price_drop_min_abs",
+    "price_drop_priority",
 ]
 
 
@@ -47,6 +51,10 @@ async def _read_settings(session: AsyncSession, secret_key: str) -> SettingsOut:
         ),
         heartbeat_hours=float(await get(session, "heartbeat_hours", "0") or 0),
         early_access_days=int(await get(session, "early_access_days", "30") or 30),
+        ao_member=truthy(await get(session, "ao_member", "false")),
+        price_drop_min_pct=float(await get(session, "price_drop_min_pct", "5") or 5),
+        price_drop_min_abs=float(await get(session, "price_drop_min_abs", "5") or 5),
+        price_drop_priority=int(await get(session, "price_drop_priority", "6") or 6),
     )
 
 
@@ -67,6 +75,10 @@ async def update_settings(
         if key in data:
             await set_value(session, key, str(data[key]),
                             is_secret=False, secret_key=secret_key)
+
+    if "ao_member" in data:
+        await set_value(session, "ao_member", str(data["ao_member"]).lower(),
+                        is_secret=False, secret_key=secret_key)
 
     # gotify_token: write-only; only update when a non-empty string is provided
     if data.get("gotify_token"):
