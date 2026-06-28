@@ -124,3 +124,16 @@ async def test_settings_test_returns_delivered_false(client):
         resp = await client.post("/api/settings/test")
     assert resp.status_code == 200
     assert resp.json() == {"delivered": False}
+
+
+async def test_settings_ao_member_and_price_drop_roundtrip(client):
+    r = await client.put("/api/settings", json={
+        "ao_member": True, "price_drop_min_pct": 8,
+        "price_drop_min_abs": 10, "price_drop_priority": 7,
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ao_member"] is True
+    assert body["price_drop_min_pct"] == 8
+    assert body["price_drop_min_abs"] == 10
+    assert body["price_drop_priority"] == 7

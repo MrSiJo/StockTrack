@@ -22,10 +22,13 @@ def at(m): return B + timedelta(minutes=m)
 
 async def _seed(sm):
     async with sm() as s:
-        w = Watch(store="ao", url="https://ao.com/l/example"); s.add(w); await s.flush()
+        w = Watch(store="ao", url="https://ao.com/l/example")
+        s.add(w)
+        await s.flush()
         p = Product(watch_id=w.id, store="ao", code="A-16K", title="AO Cirro 16K",
                     url="https://ao.com/p/16k", basket_url="https://ao.com/Build_Shopping_Basket.aspx?items=A-16K:1")
-        s.add(p); await s.flush()
+        s.add(p)
+        await s.flush()
         s.add_all([
             Event(product_id=p.id, ts=at(0), kind="early_access", price=629.0),
             Event(product_id=p.id, ts=at(17), kind="public", price=629.0),

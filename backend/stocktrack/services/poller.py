@@ -8,6 +8,7 @@ from stocktrack.services import gotify
 from stocktrack.services.notify_format import fmt_price, human_duration, md_lines
 from stocktrack.services.settings_service import get as get_setting
 from stocktrack.services.settings_service import gotify_config
+from stocktrack.services.settings_service import truthy
 from stocktrack.sites import get_handler
 
 
@@ -71,6 +72,27 @@ def _oos_msg(p, secs):
     return md_lines(parts)
 
 
+def is_price_drop(old, new, min_pct, min_abs) -> bool:
+    """True when ``new`` is a meaningful drop below ``old`` (both thresholds met)."""
+    if old is None or new is None or new >= old:
+        return False
+    drop = old - new
+    pct = (drop / old) * 100 if old else 0
+    return drop >= min_abs and pct >= min_pct
+
+
+def _price_drop_msg(p, old, new) -> str:
+    drop = old - new
+    pct = (drop / old) * 100 if old else 0
+    parts = [f"**{fmt_price(old)} → {fmt_price(new)}** "
+             f"(−{fmt_price(drop)}, −{pct:.0f}%)"]
+    if getattr(p, "delivery", ""):
+        parts.append(f"Delivery: {p.delivery}")
+    if p.url:
+        parts.append(f"[Open product page ↗]({p.url})")
+    return md_lines(parts)
+
+
 _STATUS_ICONS = {"early": "⚡", "public": "🟢", "oos": "🔴"}
 _STATUS_LABELS = {"early": "early access", "public": "in stock", "oos": "out of stock"}
 
@@ -97,14 +119,15 @@ def build_status_summary(watch, products) -> tuple[str, str]:
 
 async def check_watch(session, watch, *, secret_key, handler=None,
                       fetcher=None, sender=None, now=None) -> dict:
-    handler = handler or get_handler(watch.store)
+    handler = handler or get_handler(watch.store, watch.kind)
     fetcher = fetcher or _default_fetcher
     sender = sender or gotify.send
     now = now or datetime.now(timezone.utc)
 
     raw = await fetcher(handler, watch.url)
     ea_days = int(await get_setting(session, "early_access_days", "30") or 30)
-    handler.configure(early_access_days=ea_days)
+    ao_member = truthy(await get_setting(session, "ao_member", "false"))
+    handler.configure(early_access_days=ea_days, ao_member=ao_member)
     parsed = [p for p in handler.parse(raw)
               if p.code and matches(p, watch.include_filter, watch.exclude_filter)]
 
@@ -114,7 +137,10 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     cfg = await gotify_config(session, secret_key)
     restock_priority = int(await get_setting(session, "restock_priority", "8") or 8)
     oos_priority = int(await get_setting(session, "oos_priority", "4") or 4)
-    early_count = public_count = oos_count = 0
+    drop_min_pct = float(await get_setting(session, "price_drop_min_pct", "5") or 5)
+    drop_min_abs = float(await get_setting(session, "price_drop_min_abs", "5") or 5)
+    drop_priority = int(await get_setting(session, "price_drop_priority", "6") or 6)
+    early_count = public_count = oos_count = price_drop_count = 0
 
     for p in parsed:
         row = rows.get(p.code)
@@ -129,6 +155,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
         prev_since = _utc(row.available_since)
 
         # Refresh metadata regardless of phase
+        old_price = row.current_price
         row.title, row.brand, row.url = p.title, p.brand, p.url
         row.basket_url = p.basket_url
         row.current_price, row.last_checked, row.last_seen = p.price, now, now
@@ -188,6 +215,19 @@ async def check_watch(session, watch, *, secret_key, handler=None,
                 row.current_in_stock = True
                 row.available_since = prev_since
 
+        if (watch.track_price_drops
+                and is_price_drop(old_price, p.price, drop_min_pct, drop_min_abs)):
+            title = f"💸 {watch.store} · Price drop: {p.title or p.code}"
+            ok = await asyncio.to_thread(
+                sender, cfg, title, _price_drop_msg(p, old_price, p.price),
+                click_url=p.url or None, markdown=True, priority=drop_priority,
+            )
+            if ok:
+                session.add(Event(product_id=row.id, kind="price_drop", price=p.price))
+                price_drop_count += 1
+            else:
+                row.current_price = old_price  # delivery-safe: revert, retry next tick
+
     # Addendum A: update watch health on success
     watch.last_checked_at = now
     watch.last_ok_at = now
@@ -195,4 +235,5 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     watch.last_error = ""
 
     await session.commit()
-    return {"parsed": len(parsed), "early": early_count, "public": public_count, "oos": oos_count}
+    return {"parsed": len(parsed), "early": early_count, "public": public_count,
+            "oos": oos_count, "price_drops": price_drop_count}

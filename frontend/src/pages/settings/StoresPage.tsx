@@ -31,7 +31,7 @@ export function StoresPage() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {stores.map((s) => (
-              <tr key={s.name}>
+              <tr key={`${s.name}::${s.kind}`}>
                 <td className="py-3 pl-4 pr-3 text-sm font-medium text-gray-900">
                   {s.name}
                 </td>

@@ -11,9 +11,10 @@ interface Props {
 
 export function WatchForm({ initial, onClose }: Props) {
   const { stores, addWatch, editWatch, preview } = useSettingsStore()
-  const defaultStore = stores[0]?.name ?? ''
+  const defaultStore = stores[0]
 
-  const [store, setStore] = useState(initial?.store ?? defaultStore)
+  const [store, setStore] = useState(initial?.store ?? defaultStore?.name ?? '')
+  const [kind, setKind] = useState(initial?.kind ?? defaultStore?.kind ?? 'listing')
   const [url, setUrl] = useState(initial?.url ?? '')
   const [label, setLabel] = useState(initial?.label ?? '')
   const [includeFilter, setIncludeFilter] = useState(
@@ -26,6 +27,7 @@ export function WatchForm({ initial, onClose }: Props) {
     String(initial?.interval_seconds ?? 300),
   )
   const [enabled, setEnabled] = useState(initial?.enabled ?? true)
+  const [trackPriceDrops, setTrackPriceDrops] = useState(initial?.track_price_drops ?? false)
 
   const [previewProducts, setPreviewProducts] = useState<
     PreviewProduct[] | null
@@ -43,8 +45,9 @@ export function WatchForm({ initial, onClose }: Props) {
       const products = await preview({
         store,
         url,
-        include_filter: includeFilter,
-        exclude_filter: excludeFilter,
+        kind,
+        include_filter: kind === 'product' ? '' : includeFilter,
+        exclude_filter: kind === 'product' ? '' : excludeFilter,
       })
       setPreviewProducts(products)
     } catch (e) {
@@ -63,10 +66,12 @@ export function WatchForm({ initial, onClose }: Props) {
         store,
         url,
         label,
-        include_filter: includeFilter,
-        exclude_filter: excludeFilter,
+        kind,
+        include_filter: kind === 'product' ? '' : includeFilter,
+        exclude_filter: kind === 'product' ? '' : excludeFilter,
         interval_seconds: Number(intervalSeconds),
         enabled,
+        track_price_drops: trackPriceDrops,
       }
       if (initial) {
         await editWatch(initial.id, body)
@@ -93,13 +98,17 @@ export function WatchForm({ initial, onClose }: Props) {
               Store
             </label>
             <select
-              value={store}
-              onChange={(e) => setStore(e.target.value)}
+              value={`${store}::${kind}`}
+              onChange={(e) => {
+                const [n, k] = e.target.value.split('::')
+                setStore(n)
+                setKind(k)
+              }}
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
               required
             >
               {stores.map((s) => (
-                <option key={s.name} value={s.name}>
+                <option key={`${s.name}::${s.kind}`} value={`${s.name}::${s.kind}`}>
                   {s.name} ({s.kind})
                 </option>
               ))}
@@ -121,7 +130,7 @@ export function WatchForm({ initial, onClose }: Props) {
 
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-700">
-            Listing URL
+            {kind === 'product' ? 'Product page URL' : 'Listing URL'}
           </label>
           <input
             type="url"
@@ -132,32 +141,34 @@ export function WatchForm({ initial, onClose }: Props) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
-              Include filter (substring match on brand+title)
-            </label>
-            <input
-              type="text"
-              value={includeFilter}
-              onChange={(e) => setIncludeFilter(e.target.value)}
-              placeholder="e.g. Meaco"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            />
+        {kind !== 'product' && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-700">
+                Include filter (substring match on brand+title)
+              </label>
+              <input
+                type="text"
+                value={includeFilter}
+                onChange={(e) => setIncludeFilter(e.target.value)}
+                placeholder="e.g. Meaco"
+                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-700">
+                Exclude filter
+              </label>
+              <input
+                type="text"
+                value={excludeFilter}
+                onChange={(e) => setExcludeFilter(e.target.value)}
+                placeholder="e.g. Portable"
+                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
-              Exclude filter
-            </label>
-            <input
-              type="text"
-              value={excludeFilter}
-              onChange={(e) => setExcludeFilter(e.target.value)}
-              placeholder="e.g. Portable"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            />
-          </div>
-        </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -172,7 +183,7 @@ export function WatchForm({ initial, onClose }: Props) {
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
           </div>
-          <div className="flex items-end">
+          <div className="flex items-end gap-4">
             <label className="flex cursor-pointer items-center gap-2 pb-1.5 text-sm text-gray-700">
               <input
                 type="checkbox"
@@ -181,6 +192,15 @@ export function WatchForm({ initial, onClose }: Props) {
                 className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
               />
               Enabled
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 pb-1.5 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={trackPriceDrops}
+                onChange={(e) => setTrackPriceDrops(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              Alert on price drops
             </label>
           </div>
         </div>

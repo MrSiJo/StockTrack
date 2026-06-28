@@ -1,8 +1,12 @@
 """DB-backed settings with encrypted secrets + env seed."""
 from typing import Optional
-from sqlalchemy import select
 from stocktrack.crypto import decrypt, encrypt
 from stocktrack.models.setting import Setting
+
+
+def truthy(v) -> bool:
+    """Parse a stored/string/bool setting value as a boolean."""
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
 
 async def get(session, key: str, default: Optional[str] = None) -> Optional[str]:
     """Get a setting value by key. Returns the stored value as-is.
@@ -55,6 +59,10 @@ async def seed_from_env(session, env, secret_key: str) -> None:
         "failure_alert_after": (str(env.failure_alert_after), False),
         "heartbeat_hours": (str(env.heartbeat_hours), False),
         "early_access_days": (str(env.early_access_days), False),
+        "ao_member": (str(env.ao_member).lower(), False),
+        "price_drop_min_pct": (str(env.price_drop_min_pct), False),
+        "price_drop_min_abs": (str(env.price_drop_min_abs), False),
+        "price_drop_priority": (str(env.price_drop_priority), False),
     }
     for key, (value, is_secret) in defaults.items():
         existing = await session.get(Setting, key)

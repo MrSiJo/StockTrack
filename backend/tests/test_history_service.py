@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from stocktrack.services.history import Episode, build_episodes
+from stocktrack.services.history import build_episodes
 
 
 @dataclass

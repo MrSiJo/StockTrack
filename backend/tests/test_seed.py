@@ -1,6 +1,5 @@
 import os
 
-import pytest
 from sqlalchemy import select
 
 os.environ.setdefault("APP_SECRET_KEY", "t" * 32)

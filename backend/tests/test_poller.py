@@ -32,7 +32,9 @@ async def _run(session, watch, products, *, sends_ok=True, now=None):
 async def test_public_then_oos_with_duration(sessionmaker_):
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="Meaco", exclude_filter="")
-        s.add(w); await s.commit(); wid = w.id
+        s.add(w)
+        await s.commit()
+        wid = w.id
 
     # 1) baseline all OOS -> no sends
     async with sessionmaker_() as s:
@@ -60,7 +62,9 @@ async def test_public_then_oos_with_duration(sessionmaker_):
 async def test_failed_public_send_does_not_advance_state(sessionmaker_):
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="Meaco", exclude_filter="")
-        s.add(w); await s.commit(); wid = w.id
+        s.add(w)
+        await s.commit()
+        wid = w.id
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
         await _run(s, w, [P("A", "Meaco 12K", True, "Meaco", 519.0)], sends_ok=False)
@@ -71,10 +75,11 @@ async def test_failed_public_send_does_not_advance_state(sessionmaker_):
 
 async def test_early_to_public_sequence(sessionmaker_):
     """oos -> early -> public -> oos, checking event kinds and available_seconds."""
-    from datetime import timedelta
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="Meaco", exclude_filter="")
-        s.add(w); await s.commit(); wid = w.id
+        s.add(w)
+        await s.commit()
+        wid = w.id
 
     t0 = datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc)
     t1 = datetime(2026, 6, 27, 11, 0, 0, tzinfo=timezone.utc)
@@ -118,7 +123,9 @@ async def test_early_to_public_sequence(sessionmaker_):
 async def test_watch_health_updated_on_success(sessionmaker_):
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="Meaco", exclude_filter="")
-        s.add(w); await s.commit(); wid = w.id
+        s.add(w)
+        await s.commit()
+        wid = w.id
     t = datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc)
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
@@ -126,3 +133,121 @@ async def test_watch_health_updated_on_success(sessionmaker_):
         w2 = await s.get(Watch, wid)
         assert w2.last_ok_at == t
         assert w2.consecutive_failures == 0
+
+
+# ---------------------------------------------------------------------------
+# Price-drop helpers
+# ---------------------------------------------------------------------------
+
+def test_is_price_drop_thresholds():
+    f = poller.is_price_drop
+    # 519 -> 493 = -26 (-5.0%): meets pct>=5 and abs>=5
+    assert f(519.0, 493.0, 5, 5) is True
+    # tiny drop below both thresholds
+    assert f(519.0, 517.0, 5, 5) is False        # 2.0 abs, 0.39%
+    # meets pct but not abs floor (20 -> 19 = 5% but only £1)
+    assert f(20.0, 19.0, 5, 5) is False
+    # price rose
+    assert f(493.0, 519.0, 5, 5) is False
+    # equal
+    assert f(500.0, 500.0, 5, 5) is False
+    # null baseline / null new
+    assert f(None, 500.0, 5, 5) is False
+    assert f(500.0, None, 5, 5) is False
+
+
+# ---------------------------------------------------------------------------
+# Price-drop integration tests
+# ---------------------------------------------------------------------------
+
+async def _set(session, key, value):
+    from stocktrack.services.settings_service import set_value
+    await set_value(session, key, str(value))
+    await session.commit()
+
+
+async def test_price_drop_alerts_when_threshold_met(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="Meaco",
+                  exclude_filter="", track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "price_drop_min_pct", 5)
+        await _set(s, "price_drop_min_abs", 5)
+        await _set(s, "price_drop_priority", 6)
+
+    # 1) baseline: in stock at 519 -> public event, no drop (first sighting)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Meaco 12K", True, "Meaco", 519.0)])
+        assert res.get("price_drops", 0) == 0
+
+    # 2) price drops to 493 -> price_drop event at priority 6
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Meaco 12K", True, "Meaco", 493.0)])
+        assert res["price_drops"] == 1
+        drop_send = [x for x in sent if x["priority"] == 6]
+        assert drop_send
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert "price_drop" in kinds
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.current_price == 493.0
+
+
+async def test_price_drop_not_sent_below_threshold(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="Meaco",
+                  exclude_filter="", track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "price_drop_min_pct", 5)
+        await _set(s, "price_drop_min_abs", 5)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Meaco 12K", True, "Meaco", 519.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, _ = await _run(s, w, [P("A", "Meaco 12K", True, "Meaco", 517.0)])
+        assert res.get("price_drops", 0) == 0
+
+
+async def test_price_drop_disabled_when_flag_off(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="Meaco",
+                  exclude_filter="", track_price_drops=False)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Meaco 12K", True, "Meaco", 519.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, _ = await _run(s, w, [P("A", "Meaco 12K", True, "Meaco", 400.0)])
+        assert res.get("price_drops", 0) == 0
+
+
+async def test_failed_price_drop_send_reverts_price(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="Meaco",
+                  exclude_filter="", track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "price_drop_min_pct", 5)
+        await _set(s, "price_drop_min_abs", 5)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Meaco 12K", True, "Meaco", 519.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, _ = await _run(s, w, [P("A", "Meaco 12K", True, "Meaco", 493.0)],
+                            sends_ok=False)
+        assert res.get("price_drops", 0) == 0
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.current_price == 519.0   # reverted (delivery-safe)
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert "price_drop" not in kinds

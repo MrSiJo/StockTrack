@@ -23,6 +23,17 @@ async def test_create_watch(client):
     assert data["label"] == "AO Meaco"
 
 
+async def test_create_product_watch_with_price_drops(client):
+    r = await client.post("/api/watches", json={
+        "store": "ao", "kind": "product", "url": "https://example.test/p/1",
+        "track_price_drops": True,
+    })
+    assert r.status_code == 201
+    body = r.json()
+    assert body["kind"] == "product"
+    assert body["track_price_drops"] is True
+
+
 async def test_create_watch_unknown_store_returns_422(client):
     resp = await client.post("/api/watches", json={
         "store": "unknown_store_xyz",
@@ -132,7 +143,6 @@ async def test_check_watch_404(client):
 
 async def test_check_notify_true_sends_one_status_push(client, sessionmaker_):
     """notify=true sends exactly one status push; title contains 'status'; notified=true."""
-    from unittest.mock import call
 
     from stocktrack.models import Product, Watch
     from stocktrack.services.settings_service import set_value
@@ -292,6 +302,21 @@ async def test_preview_fetch_error_returns_502(client):
 
     assert resp.status_code == 502
     assert "connection refused" in resp.json()["detail"]
+
+
+async def test_preview_product_kind(client, monkeypatch):
+    from pathlib import Path
+    from stocktrack.sites import ao
+    raw = (Path(__file__).parent / "fixtures" / "ao_product.html").read_text(encoding="utf-8")
+    monkeypatch.setattr(ao.AoProductHandler, "fetch", lambda self, url: raw)
+    r = await client.post("/api/watches/preview", json={
+        "store": "ao", "kind": "product", "url": "https://example.test/p/1",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["code"] == "999001"
+    assert body[0]["price"] == 519.0
 
 
 async def test_preview_configure_respects_early_access_days(client, sessionmaker_):

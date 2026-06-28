@@ -29,19 +29,29 @@ async def test_product_unique_per_watch_code(sessionmaker_):
     from sqlalchemy.exc import IntegrityError
     async with sessionmaker_() as s:
         w = Watch(store="ao", url="u")
-        s.add(w); await s.flush()
+        s.add(w)
+        await s.flush()
         s.add(Product(watch_id=w.id, store="ao", code="DUP", title="a"))
         s.add(Product(watch_id=w.id, store="ao", code="DUP", title="b"))
         with pytest.raises(IntegrityError):
             await s.commit()
 
 async def test_watch_health_columns(sessionmaker_):
-    from datetime import datetime, timezone
     async with sessionmaker_() as s:
         w = Watch(store="ao", url="u")
-        s.add(w); await s.commit()
+        s.add(w)
+        await s.commit()
     async with sessionmaker_() as s:
         w = (await s.execute(select(Watch))).scalar_one()
         assert w.consecutive_failures == 0
         assert w.last_checked_at is None
         assert w.last_error == ""
+
+async def test_watch_kind_and_price_drop_defaults(sessionmaker_):
+    from stocktrack.models import Watch
+    async with sessionmaker_() as s:
+        w = Watch(store="ao", url="u")
+        s.add(w)
+        await s.commit()
+        assert w.kind == "listing"
+        assert w.track_price_drops is False

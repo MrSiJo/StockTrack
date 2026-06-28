@@ -16,6 +16,8 @@ class WatchOut(BaseModel):
     exclude_filter: str
     interval_seconds: int
     enabled: bool
+    kind: str
+    track_price_drops: bool
     created_at: datetime
     last_checked_at: Optional[datetime]
     last_ok_at: Optional[datetime]
@@ -31,6 +33,8 @@ class WatchCreate(BaseModel):
     exclude_filter: str = ""
     interval_seconds: int = 300
     enabled: bool = True
+    kind: str = "listing"
+    track_price_drops: bool = False
 
 
 class WatchUpdate(BaseModel):
@@ -41,6 +45,8 @@ class WatchUpdate(BaseModel):
     exclude_filter: Optional[str] = None
     interval_seconds: Optional[int] = None
     enabled: Optional[bool] = None
+    kind: Optional[str] = None
+    track_price_drops: Optional[bool] = None
 
 
 # ── Status ─────────────────────────────────────────────────────────────────
@@ -101,6 +107,7 @@ class StoreOut(BaseModel):
 class PreviewRequest(BaseModel):
     store: str
     url: str
+    kind: str = "listing"
     include_filter: str = ""
     exclude_filter: str = ""
 
@@ -130,6 +137,10 @@ class SettingsOut(BaseModel):
     failure_alert_after: int
     heartbeat_hours: float
     early_access_days: int
+    ao_member: bool
+    price_drop_min_pct: float
+    price_drop_min_abs: float
+    price_drop_priority: int
 
 
 class SettingsUpdate(BaseModel):
@@ -143,6 +154,10 @@ class SettingsUpdate(BaseModel):
     failure_alert_after: Optional[int] = None
     heartbeat_hours: Optional[float] = None
     early_access_days: Optional[int] = None
+    ao_member: Optional[bool] = None
+    price_drop_min_pct: Optional[float] = None
+    price_drop_min_abs: Optional[float] = None
+    price_drop_priority: Optional[int] = None
 
 
 # ── History ────────────────────────────────────────────────────────────────
