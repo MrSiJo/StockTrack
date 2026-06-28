@@ -63,6 +63,20 @@ def _public_msg(p):
     return md_lines(parts) or "now available"
 
 
+def _new_product_msg(p):
+    parts = []
+    status = "in stock" if p.in_stock else "out of stock"
+    if p.price is not None:
+        parts.append(f"**{fmt_price(p.price)}** — {status}")
+    else:
+        parts.append(status)
+    if p.delivery:
+        parts.append(p.delivery)
+    if p.url:
+        parts.append(f"[Open product page ↗]({p.url})")
+    return md_lines(parts) or "new product"
+
+
 def _oos_msg(p, secs):
     dur = human_duration(secs)
     parts = [f"Was buyable for ~{dur}." if dur else "Was briefly available."]
@@ -141,6 +155,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     drop_min_abs = float(await get_setting(session, "price_drop_min_abs", "5") or 5)
     drop_priority = int(await get_setting(session, "price_drop_priority", "6") or 6)
     early_count = public_count = oos_count = price_drop_count = 0
+    new_product_count = 0
 
     for p in parsed:
         row = rows.get(p.code)
@@ -163,6 +178,26 @@ async def check_watch(session, watch, *, secret_key, handler=None,
                           first_seen=now)
             session.add(row)
             await session.flush()
+            curr = _phase(p.availability, p.in_stock)
+            row.title, row.brand, row.url = p.title, p.brand, p.url
+            row.basket_url, row.delivery = p.basket_url, p.delivery
+            row.current_price, row.last_checked, row.last_seen = p.price, now, now
+            title = f"🆕 {watch.store} · New product: {p.title or p.code}"
+            ok = await asyncio.to_thread(
+                sender, cfg, title, _new_product_msg(p),
+                click_url=p.url or None, markdown=True, priority=restock_priority,
+            )
+            if ok:
+                session.add(Event(product_id=row.id, kind="new_product", price=p.price))
+                row.availability = curr
+                row.current_in_stock = curr != "oos"
+                row.available_since = now if curr != "oos" else None
+                new_product_count += 1
+            else:
+                row.availability = "oos"
+                row.current_in_stock = False
+                row.available_since = None
+            continue
 
         prev = _phase(row.availability, row.current_in_stock)
         curr = _phase(p.availability, p.in_stock)
@@ -251,4 +286,5 @@ async def check_watch(session, watch, *, secret_key, handler=None,
 
     await session.commit()
     return {"parsed": len(parsed), "early": early_count, "public": public_count,
-            "oos": oos_count, "price_drops": price_drop_count}
+            "oos": oos_count, "price_drops": price_drop_count,
+            "new_products": new_product_count, "lead_time_changes": 0}

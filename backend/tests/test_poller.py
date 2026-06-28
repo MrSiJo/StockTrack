@@ -311,3 +311,43 @@ async def test_failed_price_drop_send_reverts_price(sessionmaker_):
         assert p.current_price == 519.0   # reverted (delivery-safe)
         kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
         assert "price_drop" not in kinds
+
+
+async def test_new_product_alert_on_established_watch(sessionmaker_):
+    from sqlalchemy import select
+    from stocktrack.models import Event, Watch
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w); await s.commit(); wid = w.id
+    # baseline with product A
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel A", True, "", 100.0)])
+    # 2nd poll: B is brand new and in stock -> exactly one new_product alert (not a public one)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel A", True, "", 100.0),
+                                      P("B", "Panel B", True, "", 150.0)])
+        assert res["new_products"] == 1
+        assert len(sent) == 1
+        assert "New product" in sent[0]["title"]
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert kinds == ["new_product"]
+
+
+async def test_new_product_send_failure_is_delivery_safe(sessionmaker_):
+    from sqlalchemy import select
+    from stocktrack.models import Event, Product as PModel, Watch
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w); await s.commit(); wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel A", True, "", 100.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, _ = await _run(s, w, [P("A", "Panel A", True, "", 100.0),
+                                   P("B", "Panel B", True, "", 150.0)], sends_ok=False)
+        assert res["new_products"] == 0
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert "new_product" not in kinds
