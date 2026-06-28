@@ -53,10 +53,12 @@ export interface Watch {
   store: string
   url: string
   label: string
+  kind: string
   include_filter: string
   exclude_filter: string
   interval_seconds: number
   enabled: boolean
+  track_price_drops: boolean
   created_at: string
   last_checked_at: string | null
   last_ok_at: string | null
@@ -68,20 +70,24 @@ export interface WatchCreate {
   store: string
   url: string
   label?: string
+  kind?: string
   include_filter?: string
   exclude_filter?: string
   interval_seconds?: number
   enabled?: boolean
+  track_price_drops?: boolean
 }
 
 export interface WatchUpdate {
   store?: string
   url?: string
   label?: string
+  kind?: string
   include_filter?: string
   exclude_filter?: string
   interval_seconds?: number
   enabled?: boolean
+  track_price_drops?: boolean
 }
 
 // ── Stores (GET /api/stores) ────────────────────────────────────────────────
@@ -97,6 +103,7 @@ export interface Store {
 export interface PreviewRequest {
   store: string
   url: string
+  kind?: string
   include_filter?: string
   exclude_filter?: string
 }
@@ -126,6 +133,10 @@ export interface Settings {
   failure_alert_after: number
   heartbeat_hours: number
   early_access_days: number
+  ao_member: boolean
+  price_drop_min_pct: number
+  price_drop_min_abs: number
+  price_drop_priority: number
 }
 
 // ── Check result (POST /api/watches/{id}/check) ────────────────────────────
@@ -149,4 +160,8 @@ export interface SettingsUpdate {
   failure_alert_after?: number
   heartbeat_hours?: number
   early_access_days?: number
+  ao_member?: boolean
+  price_drop_min_pct?: number
+  price_drop_min_abs?: number
+  price_drop_priority?: number
 }
