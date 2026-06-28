@@ -94,6 +94,13 @@ def is_price_drop(old, new, min_pct, min_abs) -> bool:
     return drop >= min_abs and pct >= min_pct
 
 
+def _lead_time_msg(p, old, new):
+    parts = [f"**{old or '—'} → {new or '—'}**"]
+    if p.url:
+        parts.append(f"[Open product page ↗]({p.url})")
+    return md_lines(parts)
+
+
 def _price_drop_msg(p, old, new) -> str:
     drop = old - new
     pct = (drop / old) * 100 if old else 0
@@ -154,8 +161,9 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     drop_min_pct = float(await get_setting(session, "price_drop_min_pct", "5") or 5)
     drop_min_abs = float(await get_setting(session, "price_drop_min_abs", "5") or 5)
     drop_priority = int(await get_setting(session, "price_drop_priority", "6") or 6)
+    lead_time_priority = int(await get_setting(session, "lead_time_priority", "5") or 5)
     early_count = public_count = oos_count = price_drop_count = 0
-    new_product_count = 0
+    new_product_count = lead_time_count = 0
 
     for p in parsed:
         row = rows.get(p.code)
@@ -205,6 +213,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
 
         # Refresh metadata regardless of phase
         old_price = row.current_price
+        old_delivery = row.delivery
         row.title, row.brand, row.url = p.title, p.brand, p.url
         row.basket_url = p.basket_url
         row.delivery = p.delivery
@@ -278,6 +287,19 @@ async def check_watch(session, watch, *, secret_key, handler=None,
             else:
                 row.current_price = old_price  # delivery-safe: revert, retry next tick
 
+        if (prev != "oos" and curr != "oos"
+                and old_delivery and p.delivery and old_delivery != p.delivery):
+            title = f"🚚 {watch.store} · Delivery changed: {p.title or p.code}"
+            ok = await asyncio.to_thread(
+                sender, cfg, title, _lead_time_msg(p, old_delivery, p.delivery),
+                click_url=p.url or None, markdown=True, priority=lead_time_priority,
+            )
+            if ok:
+                session.add(Event(product_id=row.id, kind="lead_time", price=p.price))
+                lead_time_count += 1
+            else:
+                row.delivery = old_delivery  # delivery-safe: revert, retry next tick
+
     # Addendum A: update watch health on success
     watch.last_checked_at = now
     watch.last_ok_at = now
@@ -287,4 +309,4 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     await session.commit()
     return {"parsed": len(parsed), "early": early_count, "public": public_count,
             "oos": oos_count, "price_drops": price_drop_count,
-            "new_products": new_product_count, "lead_time_changes": 0}
+            "new_products": new_product_count, "lead_time_changes": lead_time_count}

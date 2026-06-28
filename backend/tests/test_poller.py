@@ -351,3 +351,38 @@ async def test_new_product_send_failure_is_delivery_safe(sessionmaker_):
         assert res["new_products"] == 0
         kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
         assert "new_product" not in kinds
+
+
+async def test_lead_time_change_alert(sessionmaker_):
+    from sqlalchemy import select
+    from stocktrack.models import Event, Watch
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w); await s.commit(); wid = w.id
+    # baseline in stock with delivery X
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 100.0, delivery="Delivery by Mon 30 Jun (carrier)")])
+    # 2nd poll: still in stock, delivery changed -> lead_time alert
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0, delivery="Delivery by Thu 2 Jul (branch)")])
+        assert res["lead_time_changes"] == 1
+        assert any("Delivery changed" in x["title"] for x in sent)
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert "lead_time" in kinds
+
+
+async def test_lead_time_no_alert_when_unchanged(sessionmaker_):
+    from stocktrack.models import Watch
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w); await s.commit(); wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 100.0, delivery="Delivery by Mon 30 Jun (carrier)")])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0, delivery="Delivery by Mon 30 Jun (carrier)")])
+        assert res["lead_time_changes"] == 0
+        assert sent == []
