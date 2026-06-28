@@ -37,7 +37,7 @@ export interface WatchStatus {
 export interface StockEvent {
   id: number
   ts: string                   // ISO datetime
-  kind: 'early_access' | 'public' | 'oos' | string
+  kind: 'early_access' | 'public' | 'oos' | 'price_drop' | 'new_product' | 'lead_time' | string
   price: number | null
   available_seconds: number | null
   product_title: string
