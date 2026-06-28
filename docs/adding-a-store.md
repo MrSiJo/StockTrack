@@ -75,9 +75,11 @@ The City Plumbing handler (`sites/cityplumbing.py`) is the worked example:
    `fetch()` raises `RuntimeError` with a human-readable message directing the
    user to the Stores settings panel.
 
-`Product.delivery` is persisted on every poll tick (e.g.
-`"Delivery by Thu 3 Jul (standard)"`). The `lead_time` notification fires when
-this string changes for a product that is already in stock — see the Transitions
+`Product.delivery` is persisted on every poll tick. City Plumbing prefers the
+delivery channel and falls back to click-and-collect, so the string is either
+`"Delivery by Thu 3 Jul"` or `"Collection by Thu 3 Jul"` (a product is in stock
+if either channel is available). The `lead_time` notification fires when this
+string changes for a product that is already in stock — see the Transitions
 section in [architecture.md](./architecture.md).
 
 ## Checklist

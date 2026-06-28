@@ -83,7 +83,13 @@ def _extract_products(html: str) -> list[dict]:
     return out
 
 
-def _lead_time_text(estimated_iso, dtype) -> str:
+def _fulfilment_text(label: str, estimated_iso) -> str:
+    """Stable, drift-free fulfilment string, e.g. "Delivery by Tue 30 Jun".
+
+    ``label`` is the channel ("Delivery" or "Collection"). Both the dashboard
+    column and the Gotify pushes read this value; the absolute date keeps the
+    lead-time change-detection from drifting day to day.
+    """
     if not estimated_iso:
         return ""
     try:
@@ -91,9 +97,8 @@ def _lead_time_text(estimated_iso, dtype) -> str:
             str(estimated_iso).replace("Z", "+00:00")).date()
     except (TypeError, ValueError):
         return ""
-    label = f"{_WEEKDAYS[d.weekday()]} {d.day} {_MONTHS_ABBR[d.month]}"
-    suffix = f" ({str(dtype).lower()})" if dtype else ""
-    return f"Delivery by {label}{suffix}"
+    when = f"{_WEEKDAYS[d.weekday()]} {d.day} {_MONTHS_ABBR[d.month]}"
+    return f"{label} by {when}"
 
 
 def _build_envelope(products: list[dict], eligibility: dict) -> str:
@@ -150,9 +155,21 @@ class CityPlumbingHandler(SiteHandler):
         elig = env.get("eligibility") or {}
         out = []
         for p in env.get("products") or []:
-            de = (elig.get(p["code"]) or {}).get("deliveryEligibility") or {}
-            in_stock = de.get("status") == "AVAILABLE"
-            delivery = _lead_time_text(de.get("estimatedDateTime"), de.get("type")) if in_stock else ""
+            entry = elig.get(p["code"]) or {}
+            de = entry.get("deliveryEligibility") or {}
+            ce = entry.get("collectionEligibility") or {}
+            delivery_ok = de.get("status") == "AVAILABLE"
+            collection_ok = ce.get("status") == "AVAILABLE"
+            # Prefer delivery (carrier OR branch route — both arrive at the
+            # postcode); fall back to click-and-collect only when delivery
+            # isn't possible. In stock if either channel is available.
+            in_stock = delivery_ok or collection_ok
+            if delivery_ok:
+                delivery = _fulfilment_text("Delivery", de.get("estimatedDateTime"))
+            elif collection_ok:
+                delivery = _fulfilment_text("Collection", ce.get("estimatedDateTime"))
+            else:
+                delivery = ""
             out.append(Product(
                 code=p["code"],
                 title=p.get("title") or "",
