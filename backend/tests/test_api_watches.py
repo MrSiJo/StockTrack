@@ -23,6 +23,17 @@ async def test_create_watch(client):
     assert data["label"] == "AO Meaco"
 
 
+async def test_create_product_watch_with_price_drops(client):
+    r = await client.post("/api/watches", json={
+        "store": "ao", "kind": "product", "url": "https://example.test/p/1",
+        "track_price_drops": True,
+    })
+    assert r.status_code == 201
+    body = r.json()
+    assert body["kind"] == "product"
+    assert body["track_price_drops"] is True
+
+
 async def test_create_watch_unknown_store_returns_422(client):
     resp = await client.post("/api/watches", json={
         "store": "unknown_store_xyz",

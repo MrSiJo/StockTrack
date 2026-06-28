@@ -45,3 +45,11 @@ async def test_watch_health_columns(sessionmaker_):
         assert w.consecutive_failures == 0
         assert w.last_checked_at is None
         assert w.last_error == ""
+
+async def test_watch_kind_and_price_drop_defaults(sessionmaker_):
+    from stocktrack.models import Watch
+    async with sessionmaker_() as s:
+        w = Watch(store="ao", url="u")
+        s.add(w); await s.commit()
+        assert w.kind == "listing"
+        assert w.track_price_drops is False

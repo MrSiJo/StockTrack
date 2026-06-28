@@ -16,6 +16,8 @@ class Watch(Base):
     exclude_filter: Mapped[str] = mapped_column(default="")
     interval_seconds: Mapped[int] = mapped_column(default=300)
     enabled: Mapped[bool] = mapped_column(default=True)
+    kind: Mapped[str] = mapped_column(default="listing")
+    track_price_drops: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=_utcnow)
     last_checked_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     last_ok_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)

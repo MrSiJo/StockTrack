@@ -16,6 +16,8 @@ class WatchOut(BaseModel):
     exclude_filter: str
     interval_seconds: int
     enabled: bool
+    kind: str
+    track_price_drops: bool
     created_at: datetime
     last_checked_at: Optional[datetime]
     last_ok_at: Optional[datetime]
@@ -31,6 +33,8 @@ class WatchCreate(BaseModel):
     exclude_filter: str = ""
     interval_seconds: int = 300
     enabled: bool = True
+    kind: str = "listing"
+    track_price_drops: bool = False
 
 
 class WatchUpdate(BaseModel):
@@ -41,6 +45,8 @@ class WatchUpdate(BaseModel):
     exclude_filter: Optional[str] = None
     interval_seconds: Optional[int] = None
     enabled: Optional[bool] = None
+    kind: Optional[str] = None
+    track_price_drops: Optional[bool] = None
 
 
 # ── Status ─────────────────────────────────────────────────────────────────
