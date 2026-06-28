@@ -13,6 +13,7 @@ export interface Product {
   brand: string
   availability: Availability
   basket_url: string            // empty string when store doesn't expose one
+  delivery: string              // lead-time string (e.g. "Delivery by Mon 30 Jun (carrier)"); "" when none
   current_in_stock: boolean
   current_price: number | null
   available_since: string | null
