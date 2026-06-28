@@ -37,7 +37,10 @@ dev server on `:5173`).
 - **Backend** — FastAPI (Python 3.12) + async SQLAlchemy 2 + `aiosqlite`.
   `curl_cffi` browser impersonation powers the fetch layer (see below).
   `Base.metadata.create_all` builds the schema on startup — no Alembic; the
-  model set is small and additive.
+  model set is small and additive. Because `create_all` only creates whole
+  tables (never alters existing ones), `db.py` follows it with an idempotent
+  `ALTER TABLE ADD COLUMN` pass (`_add_missing_columns`) that back-fills new
+  additive columns onto pre-existing tables in deployed data volumes.
 - **Poller** — APScheduler runs one `poll_tick` job every
   `DEFAULT_INTERVAL_SECONDS`; each tick checks every enabled watch
   (`services/poller.py`). The per-watch `interval_seconds` is stored on the

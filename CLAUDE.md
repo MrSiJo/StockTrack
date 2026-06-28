@@ -32,6 +32,10 @@ Two containers: `stocktrack-api` (FastAPI :9180) + `stocktrack-ui` (nginx).
 nginx serves the SPA and proxies `/api` to the backend — the backend never
 serves the SPA, and there's no CORS in prod (same origin). SQLite at `/data`
 (named volume). Schema via `Base.metadata.create_all` on startup — **no Alembic**.
+New *additive* columns are also back-filled onto pre-existing tables by an
+idempotent `ALTER TABLE ADD COLUMN` pass in `db.py` (`_add_missing_columns`),
+because `create_all` never alters an existing table — adding a column to a model
+without this would 500 on any deployment with an existing data volume.
 
 ## Gotchas (these have bitten us)
 
