@@ -121,3 +121,83 @@ def _delivery_text(p):
     return re.sub(r"\s*\*+\s*$", "", text).strip()
 
 handler = AoHandler()
+
+
+class AoProductHandler(SiteHandler):
+    name = "ao"
+    kind = "product"
+    _early_access_days = None
+    _ao_member = False
+
+    def configure(self, *, early_access_days=None, ao_member=None, **_):
+        if early_access_days is not None:
+            self._early_access_days = int(early_access_days)
+        if ao_member is not None:
+            self._ao_member = bool(ao_member)
+
+    def fetch(self, url):
+        return fetch_html(url)
+
+    def parse(self, raw):
+        blob = _extract_product_blob(raw)
+        in_stock = bool(blob.get("isInStock"))
+        code = _attr(raw, "data-saleable-id") or _attr(raw, "data-product-code") or ""
+        title = _attr(raw, "data-product-name") or ""
+        delivery = _attr(raw, "data-price-with-delivery") or ""
+        price = _select_price(blob, self._ao_member)
+        url = _attr(raw, "data-product-url") or ""
+        return [Product(
+            code=code,
+            title=title,
+            brand="",
+            in_stock=in_stock,
+            price=price,
+            delivery=delivery,
+            url=url,
+            availability=_availability(in_stock, "", self._early_access_days),
+            basket_url=BASKET_URL.format(code=code) if code else "",
+        )]
+
+
+def _extract_product_blob(raw):
+    i = raw.find("window.digitalData.page.product = Object.assign(")
+    if i < 0:
+        raise RuntimeError("AO product blob not found - PDP layout changed?")
+    seg = raw[i:i + 8000]
+    lit = seg.find("{", seg.find(","))
+    if lit < 0:
+        raise RuntimeError("AO product blob literal not found")
+    depth = 0
+    end = None
+    for j in range(lit, len(seg)):
+        if seg[j] == "{":
+            depth += 1
+        elif seg[j] == "}":
+            depth -= 1
+            if depth == 0:
+                end = j + 1
+                break
+    if end is None:
+        raise RuntimeError("AO product blob literal not terminated")
+    return json.loads(seg[lit:end])
+
+
+def _select_price(blob, ao_member):
+    def _num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    if ao_member and blob.get("hasMemberPrice"):
+        m = _num(blob.get("memberPrice"))
+        if m is not None:
+            return m
+    return _num(blob.get("price"))
+
+
+def _attr(raw, name):
+    m = re.search(name + r'="([^"]*)"', raw)
+    return m.group(1) if m else ""
+
+
+product_handler = AoProductHandler()

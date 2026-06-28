@@ -5,6 +5,7 @@ from .base import SiteHandler
 _HANDLERS: dict[tuple[str, str], SiteHandler] = {
     (h.name, h.kind): h for h in (
         ao.handler,
+        ao.product_handler,
         johnlewis.handler,
     )
 }
