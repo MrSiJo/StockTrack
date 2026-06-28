@@ -18,11 +18,14 @@ _MONTHS = {m.lower(): i for i, m in enumerate(
 class AoHandler(SiteHandler):
     name = "ao"
     _early_access_days = None  # set via configure(); None → fall back to EARLY_ACCESS_DAYS
+    _ao_member = False  # set via configure()
 
-    def configure(self, *, early_access_days=None, **_):
-        """Store the early-access threshold for use during parse."""
+    def configure(self, *, early_access_days=None, ao_member=None, **_):
+        """Store the early-access threshold and membership flag for parse."""
         if early_access_days is not None:
             self._early_access_days = int(early_access_days)
+        if ao_member is not None:
+            self._ao_member = bool(ao_member)
 
     def fetch(self, url):
         return fetch_html(url)
@@ -40,6 +43,14 @@ class AoHandler(SiteHandler):
             raise RuntimeError("no product list inside AO lister-data")
         return [self._to_product(p) for p in products]
 
+    def _price(self, p):
+        if self._ao_member:
+            pod = p.get("PricePodViewModel") or {}
+            member = pod.get("MemberPrice")
+            if member:
+                return member
+        return p.get("Price")
+
     def _to_product(self, p):
         state = (p.get("State") or "").strip().lower()
         code = p.get("Code")
@@ -50,7 +61,7 @@ class AoHandler(SiteHandler):
             title=p.get("Title") or "",
             brand=p.get("Brand") or "",
             in_stock=in_stock,
-            price=p.get("Price"),
+            price=self._price(p),
             delivery=delivery,
             url=p.get("FullProductUrl") or p.get("ProductUrl") or "",
             availability=_availability(in_stock, delivery, self._early_access_days),

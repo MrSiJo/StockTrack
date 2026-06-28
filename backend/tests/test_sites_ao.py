@@ -59,6 +59,19 @@ def test_configure_changes_early_access_threshold():
     assert ao._availability(True, delivery, h._early_access_days) == "early"
 
 
+def test_ao_member_price_selection():
+    raw = FIX.read_text(encoding="utf-8")
+    h = ao.AoHandler()
+    h.configure(ao_member=False)
+    by = {p.code: p for p in h.parse(raw)}
+    assert by["AO2"].price == 599.0           # non-member default
+
+    h.configure(ao_member=True)
+    by = {p.code: p for p in h.parse(raw)}
+    assert by["AO2"].price == 569.0           # member price
+    assert by["AO1"].price == 519.0           # no PricePodViewModel -> standard price
+
+
 def test_registry():
     assert "ao" in available() and "johnlewis" in available()
     assert get_handler("ao").name == "ao"           # defaults to kind="listing"
