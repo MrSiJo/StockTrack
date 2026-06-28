@@ -14,7 +14,6 @@ interface GotifyForm {
   failure_alert_after: number
   heartbeat_hours: number
   early_access_days: number
-  ao_member: boolean
   price_drop_min_pct: number
   price_drop_min_abs: number
   price_drop_priority: number
@@ -31,7 +30,6 @@ const EMPTY_FORM: GotifyForm = {
   failure_alert_after: 6,
   heartbeat_hours: 0,
   early_access_days: 30,
-  ao_member: false,
   price_drop_min_pct: 5,
   price_drop_min_abs: 5,
   price_drop_priority: 6,
@@ -64,7 +62,6 @@ export function GotifyPage() {
         failure_alert_after: settings.failure_alert_after,
         heartbeat_hours: settings.heartbeat_hours,
         early_access_days: settings.early_access_days,
-        ao_member: settings.ao_member,
         price_drop_min_pct: settings.price_drop_min_pct,
         price_drop_min_abs: settings.price_drop_min_abs,
         price_drop_priority: settings.price_drop_priority,
@@ -94,7 +91,6 @@ export function GotifyPage() {
         failure_alert_after: form.failure_alert_after,
         heartbeat_hours: form.heartbeat_hours,
         early_access_days: form.early_access_days,
-        ao_member: form.ao_member,
         price_drop_min_pct: form.price_drop_min_pct,
         price_drop_min_abs: form.price_drop_min_abs,
         price_drop_priority: form.price_drop_priority,
@@ -290,17 +286,8 @@ export function GotifyPage() {
 
         <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold text-gray-800">
-            Price drops & AO membership
+            Price drops
           </h2>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={form.ao_member}
-              onChange={(e) => set('ao_member', e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            I'm an AO member (track AO member price)
-          </label>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={labelClass}>Min drop %</label>
