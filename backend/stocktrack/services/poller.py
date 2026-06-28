@@ -8,7 +8,6 @@ from stocktrack.services import gotify
 from stocktrack.services.notify_format import fmt_price, human_duration, md_lines
 from stocktrack.services.settings_service import get as get_setting
 from stocktrack.services.settings_service import gotify_config
-from stocktrack.services.settings_service import truthy
 from stocktrack.sites import get_handler
 
 
@@ -124,10 +123,9 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     sender = sender or gotify.send
     now = now or datetime.now(timezone.utc)
 
+    from stocktrack.services.settings_service import store_config_kwargs
+    handler.configure(**await store_config_kwargs(session, handler))
     raw = await fetcher(handler, watch.url)
-    ea_days = int(await get_setting(session, "early_access_days", "30") or 30)
-    ao_member = truthy(await get_setting(session, "ao_member", "false"))
-    handler.configure(early_access_days=ea_days, ao_member=ao_member)
     parsed = [p for p in handler.parse(raw)
               if p.code and matches(p, watch.include_filter, watch.exclude_filter)]
 

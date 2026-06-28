@@ -230,6 +230,28 @@ async def test_price_drop_disabled_when_flag_off(sessionmaker_):
         assert res.get("price_drops", 0) == 0
 
 
+async def test_store_config_kwargs_coerces_types(sessionmaker_):
+    from stocktrack.services.settings_service import store_config_kwargs, set_value
+    from stocktrack.sites.base import SiteHandler
+
+    class H(SiteHandler):
+        name = "fake2"
+        settings_spec = [
+            {"key": "ao_member", "type": "bool", "default": False},
+            {"key": "cp_delivery_postcode", "type": "str", "default": ""},
+        ]
+
+    async with sessionmaker_() as s:
+        await set_value(s, "early_access_days", "12")
+        await set_value(s, "ao_member", "true")
+        await set_value(s, "cp_delivery_postcode", "ZZ1 1ZZ")
+        await s.commit()
+        kw = await store_config_kwargs(s, H())
+        assert kw["early_access_days"] == 12
+        assert kw["ao_member"] is True
+        assert kw["cp_delivery_postcode"] == "ZZ1 1ZZ"
+
+
 async def test_failed_price_drop_send_reverts_price(sessionmaker_):
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="Meaco",

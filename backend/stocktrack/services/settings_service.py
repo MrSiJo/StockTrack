@@ -39,6 +39,34 @@ async def set_value(session, key: str, value: str, *, is_secret: bool = False,
         row.value = stored
         row.is_secret = is_secret
 
+def _coerce(value, type_: str):
+    if type_ == "bool":
+        return truthy(value)
+    if type_ == "int":
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+    if type_ == "float":
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+    return "" if value is None else str(value)
+
+
+async def store_config_kwargs(session, handler) -> dict:
+    """Build configure() kwargs: global early_access_days + the handler's
+    declared per-store settings, each coerced to its Python type."""
+    kwargs = {"early_access_days": int(await get(session, "early_access_days", "30") or 30)}
+    for spec in getattr(handler, "settings_spec", []) or []:
+        key = spec["key"]
+        default = spec.get("default", "")
+        raw = await get(session, key, str(default))
+        kwargs[key] = _coerce(raw, spec.get("type", "str"))
+    return kwargs
+
+
 async def gotify_config(session, secret_key: str) -> dict:
     """Return the Gotify configuration dict for use in gotify.send()."""
     url = await get(session, "gotify_url", "")
