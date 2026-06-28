@@ -24,14 +24,13 @@ function formatRelative(iso: string | null): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-// Display-only relabel of City Plumbing's delivery-route suffix:
-// the API's "carrier"/"branch" routes are shown as "delivery"/"collection".
+// Backend stores "Delivery by <date>" or "Collection by <date>"; show the
+// date with the channel as a compact suffix, e.g. "Tue 30 Jun (delivery)".
 function formatLeadTime(delivery: string): string {
   if (!delivery) return '—'
-  return delivery
-    .replace(/^Delivery by /, '')
-    .replace(/\(carrier\)$/, '(delivery)')
-    .replace(/\(branch\)$/, '(collection)')
+  const m = delivery.match(/^(Delivery|Collection) by (.+)$/)
+  if (!m) return delivery
+  return `${m[2]} (${m[1].toLowerCase()})`
 }
 
 // Cheapest first; products without a price sort to the end.

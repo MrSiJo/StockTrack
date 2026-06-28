@@ -21,34 +21,61 @@ def test_extract_products_no_grid_raises():
         cp._extract_products("<html><body>no products</body></html>")
 
 
-def test_lead_time_text_stable_absolute():
-    s = cp._lead_time_text("2026-06-30T04:00Z", "CARRIER")
-    assert "30 Jun" in s and "(carrier)" in s and "day" not in s.lower()
-    assert cp._lead_time_text(None, "CARRIER") == ""
-    assert cp._lead_time_text("not-a-date", "BRANCH") == ""
+def test_fulfilment_text_stable_absolute():
+    s = cp._fulfilment_text("Delivery", "2026-06-30T04:00Z")
+    assert s == "Delivery by Tue 30 Jun" and "day" not in s.lower()
+    assert cp._fulfilment_text("Collection", "2026-07-02T06:00Z") == "Collection by Thu 2 Jul"
+    assert cp._fulfilment_text("Delivery", None) == ""
+    assert cp._fulfilment_text("Delivery", "not-a-date") == ""
 
 
-def test_parse_delivery_only_in_stock():
+def test_parse_prefers_delivery_with_collection_fallback():
     products = [
-        {"code": "100001", "title": "Fake Panel One 400W", "price": 48.0,
+        {"code": "100001", "title": "Carrier panel", "price": 48.0,
          "url": "https://www.cityplumbing.co.uk/p/fake-panel-one/p/100001"},
-        {"code": "100002", "title": "Fake Panel Two", "price": 108.0,
+        {"code": "100002", "title": "Branch-delivery panel", "price": 108.0,
          "url": "https://www.cityplumbing.co.uk/p/fake-panel-two/p/100002"},
+        {"code": "100003", "title": "Collection-only panel", "price": 180.0,
+         "url": "https://www.cityplumbing.co.uk/p/fake-panel-three/p/100003"},
+        {"code": "100004", "title": "Unavailable panel", "price": 72.0,
+         "url": "https://www.cityplumbing.co.uk/p/fake-panel-four/p/100004"},
     ]
     eligibility = {
+        # carrier delivery → "Delivery by ..."
         "100001": {"deliveryEligibility": {"status": "AVAILABLE", "type": "CARRIER",
                    "estimatedDateTime": "2026-06-30T04:00Z"},
-                   "collectionEligibility": {"status": "AVAILABLE"}},
-        "100002": {"deliveryEligibility": {"status": "UNAVAILABLE", "type": None,
+                   "collectionEligibility": {"status": "AVAILABLE",
+                   "estimatedDateTime": "2026-07-02T06:00Z"}},
+        # branch is still delivery → "Delivery by ..." (not collection)
+        "100002": {"deliveryEligibility": {"status": "AVAILABLE", "type": "BRANCH",
+                   "estimatedDateTime": "2026-07-02T06:00Z"},
+                   "collectionEligibility": {"status": "AVAILABLE",
+                   "estimatedDateTime": "2026-07-02T06:00Z"}},
+        # delivery unavailable but collection available → "Collection by ..."
+        "100003": {"deliveryEligibility": {"status": "UNAVAILABLE", "type": None,
+                   "estimatedDateTime": None},
+                   "collectionEligibility": {"status": "AVAILABLE",
+                   "estimatedDateTime": "2026-07-03T06:00Z"}},
+        # neither → OOS
+        "100004": {"deliveryEligibility": {"status": "UNAVAILABLE", "type": None,
                    "estimatedDateTime": None},
                    "collectionEligibility": {"status": "UNAVAILABLE"}},
     }
     raw = cp._build_envelope(products, eligibility)
     out = {p.code: p for p in cp.handler.parse(raw)}
+
     assert out["100001"].in_stock is True
+    assert out["100001"].delivery == "Delivery by Tue 30 Jun"
     assert out["100001"].availability == "" and out["100001"].basket_url == ""
-    assert "30 Jun" in out["100001"].delivery
-    assert out["100002"].in_stock is False
+    # branch route is delivery, not collection
+    assert out["100002"].in_stock is True
+    assert out["100002"].delivery == "Delivery by Thu 2 Jul"
+    # collection-only is in stock, labelled collection
+    assert out["100003"].in_stock is True
+    assert out["100003"].delivery == "Collection by Fri 3 Jul"
+    # neither channel → out of stock, no fulfilment string
+    assert out["100004"].in_stock is False
+    assert out["100004"].delivery == ""
 
 
 def test_registered():
