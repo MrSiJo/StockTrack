@@ -62,3 +62,4 @@ without this would 500 on any deployment with an existing data volume.
 - `docs/superpowers/` (specs/plans) and `.env` are git-ignored and stay local.
   `docs/*.md` are the public docs.
 - Store plugins (site handlers) are fine to publish; watch URLs are not.
+  See `docs/adding-a-store.md` for the handler pattern.
