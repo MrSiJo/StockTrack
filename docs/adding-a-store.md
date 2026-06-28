@@ -19,7 +19,9 @@ phases, history, alerts) is store-agnostic.
   <store> page layout changed?")` when the blob or list is missing.
 - **`configure(self, **opts) -> None`** — optional. Consume runtime settings
   passed by the poller/preview (e.g. `early_access_days`, `ao_member`). The base
-  is a no-op and ignores unknown kwargs.
+  is a no-op and ignores unknown kwargs. The poller and preview both call it via
+  `store_config_kwargs` **before** every `fetch()`, so per-store settings are
+  available inside `fetch()` if the handler needs them there.
 - **Singletons + registration** — create `handler = XHandler()` at module level
   (plus a second instance for an extra kind, e.g. `product_handler`), then
   register by: (a) adding `from . import <store>` to the imports at the top of
@@ -46,11 +48,37 @@ AO_SETTINGS = [{"key": "ao_member",
 ```
 
 A descriptor is `{key, label, type, default}` with `type` in
-`bool` | `int` | `float`. `key` is also the `setting` table key AND a field on
+`bool` | `int` | `float` | `str` (`str` renders as a freeform text input on the
+Stores page). `key` is also the `setting` table key AND a field on
 `SettingsOut`/`SettingsUpdate` (the value transport) — add it there too. The
 Stores page renders each store's settings in a collapsible panel automatically;
 `stores()` aggregates them by store name. Read the live value inside
 `configure()`; the poller passes it in.
+
+## Two-stage / location-aware stores
+
+A handler's `fetch()` may make more than one network call when the store
+requires a secondary, location-scoped request to determine delivery eligibility.
+The City Plumbing handler (`sites/cityplumbing.py`) is the worked example:
+
+1. `fetch()` calls `fetch_html(url)` to scrape the product grid, then
+   immediately calls `post_json(GRAPHQL_URL, payload)` (imported from `base`)
+   to hit the store's GraphQL eligibility endpoint — passing a delivery postcode
+   and an optional collection branch ID.
+2. Both results are merged into a single JSON envelope and returned as the `raw`
+   string. `parse()` is therefore pure and stateless — it never makes network
+   calls itself.
+3. The postcode and branch ID come from `str`-typed per-store settings
+   (`cp_delivery_postcode`, `cp_collection_branch_id`). Because `configure()`
+   is called **before** `fetch()` (via `store_config_kwargs`), the handler
+   already holds those values when the POST is made. If the postcode is not set,
+   `fetch()` raises `RuntimeError` with a human-readable message directing the
+   user to the Stores settings panel.
+
+`Product.delivery` is persisted on every poll tick (e.g.
+`"Delivery by Thu 3 Jul (standard)"`). The `lead_time` notification fires when
+this string changes for a product that is already in stock — see the Transitions
+section in [architecture.md](./architecture.md).
 
 ## Checklist
 
