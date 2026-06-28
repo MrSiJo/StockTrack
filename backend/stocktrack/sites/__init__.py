@@ -24,5 +24,20 @@ def supported_kinds(name: str) -> list[str]:
     return sorted(k for n, k in _HANDLERS if n == name)
 
 def stores() -> list[dict]:
-    return [{"name": h.name, "kind": h.kind, "supported": True}
-            for h in _HANDLERS.values()]
+    by_name: dict[str, dict] = {}
+    for h in _HANDLERS.values():
+        entry = by_name.setdefault(
+            h.name, {"name": h.name, "kinds": set(), "supported": True, "_settings": {}}
+        )
+        entry["kinds"].add(h.kind)
+        for spec in getattr(h, "settings_spec", []):
+            entry["_settings"].setdefault(spec["key"], spec)
+    out = []
+    for entry in sorted(by_name.values(), key=lambda e: e["name"]):
+        out.append({
+            "name": entry["name"],
+            "kinds": sorted(entry["kinds"]),
+            "supported": entry["supported"],
+            "settings": list(entry["_settings"].values()),
+        })
+    return out

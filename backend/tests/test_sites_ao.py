@@ -76,11 +76,22 @@ def test_registry():
     assert get_handler("ao").name == "ao"           # defaults to kind="listing"
     assert get_handler("ao", "listing").kind == "listing"
     assert get_handler("ao", "product").kind == "product"
-    entries = stores()
-    listing = [s for s in entries if s["name"] == "ao" and s["kind"] == "listing"]
-    assert listing and listing[0]["supported"] is True
-    product = [s for s in entries if s["name"] == "ao" and s["kind"] == "product"]
-    assert product and product[0]["supported"] is True
+    entries = {s["name"]: s for s in stores()}
+    assert entries["ao"]["kinds"] == ["listing", "product"]
+    assert entries["ao"]["supported"] is True
+    assert entries["johnlewis"]["kinds"] == ["listing"]
+
+
+def test_stores_single_entity_with_settings():
+    entries = {s["name"]: s for s in stores()}
+    assert set(entries) == {"ao", "johnlewis"}
+    ao_entry = entries["ao"]
+    assert ao_entry["kinds"] == ["listing", "product"]   # sorted, deduped
+    assert ao_entry["supported"] is True
+    ao_keys = {s["key"] for s in ao_entry["settings"]}
+    assert ao_keys == {"ao_member"}                       # merged, deduped
+    assert entries["johnlewis"]["kinds"] == ["listing"]
+    assert entries["johnlewis"]["settings"] == []
 
 
 def test_ao_product_parses_single_product():

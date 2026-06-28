@@ -96,10 +96,18 @@ class EventOut(BaseModel):
 
 # ── Stores ─────────────────────────────────────────────────────────────────
 
+class StoreSettingOut(BaseModel):
+    key: str
+    label: str
+    type: str
+    default: bool | int | float
+
+
 class StoreOut(BaseModel):
     name: str
-    kind: str
+    kinds: list[str]
     supported: bool
+    settings: list[StoreSettingOut]
 
 
 # ── Preview ────────────────────────────────────────────────────────────────
