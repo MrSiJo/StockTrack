@@ -97,7 +97,7 @@ def build_status_summary(watch, products) -> tuple[str, str]:
 
 async def check_watch(session, watch, *, secret_key, handler=None,
                       fetcher=None, sender=None, now=None) -> dict:
-    handler = handler or get_handler(watch.store)
+    handler = handler or get_handler(watch.store, watch.kind)
     fetcher = fetcher or _default_fetcher
     sender = sender or gotify.send
     now = now or datetime.now(timezone.utc)

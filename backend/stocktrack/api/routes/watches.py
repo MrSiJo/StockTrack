@@ -18,7 +18,7 @@ from stocktrack.services import gotify
 from stocktrack.services.poller import build_status_summary, check_watch, matches
 from stocktrack.services.settings_service import get as get_setting
 from stocktrack.services.settings_service import gotify_config
-from stocktrack.sites import available, get_handler
+from stocktrack.sites import available, get_handler, supported_kinds
 
 router = APIRouter()
 
@@ -118,6 +118,9 @@ async def create_watch(
 ):
     if body.store not in available():
         raise HTTPException(status_code=422, detail=f"Unknown store: {body.store!r}")
+    if body.kind not in supported_kinds(body.store):
+        raise HTTPException(status_code=422,
+            detail=f"Store {body.store!r} does not support kind {body.kind!r}")
     w = Watch(**body.model_dump())
     session.add(w)
     await session.commit()
@@ -135,6 +138,11 @@ async def update_watch(
         raise HTTPException(status_code=404, detail="Watch not found")
     if body.store is not None and body.store not in available():
         raise HTTPException(status_code=422, detail=f"Unknown store: {body.store!r}")
+    new_store = body.store if body.store is not None else w.store
+    new_kind = body.kind if body.kind is not None else w.kind
+    if new_kind not in supported_kinds(new_store):
+        raise HTTPException(status_code=422,
+            detail=f"Store {new_store!r} does not support kind {new_kind!r}")
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(w, field, value)
     await session.commit()

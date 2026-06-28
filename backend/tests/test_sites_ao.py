@@ -61,6 +61,8 @@ def test_configure_changes_early_access_threshold():
 
 def test_registry():
     assert "ao" in available() and "johnlewis" in available()
-    assert get_handler("ao").name == "ao"
-    names = {s["name"]: s for s in stores()}
-    assert names["ao"]["kind"] == "listing" and names["ao"]["supported"] is True
+    assert get_handler("ao").name == "ao"           # defaults to kind="listing"
+    assert get_handler("ao", "listing").kind == "listing"
+    entries = stores()
+    listing = [s for s in entries if s["name"] == "ao" and s["kind"] == "listing"]
+    assert listing and listing[0]["supported"] is True
