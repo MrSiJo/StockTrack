@@ -3,12 +3,18 @@ import type { StockEvent } from '../api/types'
 function eventIcon(kind: string): string {
   if (kind === 'early_access') return '⚡'
   if (kind === 'public') return '🟢'
+  if (kind === 'price_drop') return '💸'
+  if (kind === 'new_product') return '🆕'
+  if (kind === 'lead_time') return '🚚'
   return '🔴'
 }
 
 function eventLabel(kind: string): string {
   if (kind === 'early_access') return 'early access'
   if (kind === 'public') return 'now public'
+  if (kind === 'price_drop') return 'price drop'
+  if (kind === 'new_product') return 'new product'
+  if (kind === 'lead_time') return 'delivery changed'
   return 'out of stock again'
 }
 

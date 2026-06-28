@@ -37,7 +37,7 @@ export interface WatchStatus {
 export interface StockEvent {
   id: number
   ts: string                   // ISO datetime
-  kind: 'early_access' | 'public' | 'oos' | string
+  kind: 'early_access' | 'public' | 'oos' | 'price_drop' | 'new_product' | 'lead_time' | string
   price: number | null
   available_seconds: number | null
   product_title: string
@@ -95,8 +95,8 @@ export interface WatchUpdate {
 export interface StoreSetting {
   key: string
   label: string
-  type: string                 // 'bool' | 'int' | 'float'
-  default: boolean | number
+  type: string                 // 'bool' | 'int' | 'float' | 'str'
+  default: boolean | number | string
 }
 
 export interface Store {
@@ -145,6 +145,9 @@ export interface Settings {
   price_drop_min_pct: number
   price_drop_min_abs: number
   price_drop_priority: number
+  lead_time_priority: number
+  cp_delivery_postcode: string
+  cp_collection_branch_id: string
 }
 
 // ── Check result (POST /api/watches/{id}/check) ────────────────────────────
@@ -172,4 +175,7 @@ export interface SettingsUpdate {
   price_drop_min_pct?: number
   price_drop_min_abs?: number
   price_drop_priority?: number
+  lead_time_priority?: number
+  cp_delivery_postcode?: string
+  cp_collection_branch_id?: string
 }

@@ -100,7 +100,7 @@ class StoreSettingOut(BaseModel):
     key: str
     label: str
     type: str
-    default: bool | int | float
+    default: bool | int | float | str
 
 
 class StoreOut(BaseModel):
@@ -149,6 +149,9 @@ class SettingsOut(BaseModel):
     price_drop_min_pct: float
     price_drop_min_abs: float
     price_drop_priority: int
+    lead_time_priority: int
+    cp_delivery_postcode: str
+    cp_collection_branch_id: str
 
 
 class SettingsUpdate(BaseModel):
@@ -166,6 +169,9 @@ class SettingsUpdate(BaseModel):
     price_drop_min_pct: Optional[float] = None
     price_drop_min_abs: Optional[float] = None
     price_drop_priority: Optional[int] = None
+    lead_time_priority: Optional[int] = None
+    cp_delivery_postcode: Optional[str] = None
+    cp_collection_branch_id: Optional[str] = None
 
 
 # ── History ────────────────────────────────────────────────────────────────

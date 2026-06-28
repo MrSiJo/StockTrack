@@ -46,7 +46,8 @@ dev server on `:5173`).
   (`services/poller.py`). The per-watch `interval_seconds` is stored on the
   row but the scheduler currently drives all watches off the one global tick.
 - **Site handlers** — one `SiteHandler` subclass per store
-  (`sites/ao.py`, `sites/johnlewis.py`), registered in `sites/__init__.py`.
+  (`sites/ao.py`, `sites/johnlewis.py`, `sites/cityplumbing.py`), registered
+  in `sites/__init__.py`.
   Each maps a store's listing HTML/JSON to the shared `Product` dataclass. See
   [adding-a-store](./adding-a-store.md) for the handler contract and a checklist.
 - **Notifications** — a delivery-safe Gotify sender (`services/gotify.py`).
@@ -72,7 +73,9 @@ parse, so changing the threshold in the UI takes effect without a redeploy.
 ## Transitions, events, and delivery-safety
 
 `check_watch` compares each product's previous phase to the freshly parsed
-phase and acts only on a *change*:
+phase and acts only on a *change*. **The first poll of a new watch is a silent
+baseline** — products are recorded without sending any alerts, so subscribers
+are not notified about pre-existing stock.
 
 | Transition | Alert | Event written |
 | --- | --- | --- |
@@ -80,11 +83,27 @@ phase and acts only on a *change*:
 | `oos/early → public` | 🟢 In stock / Now public | `public` |
 | `early/public → oos` | 🔴 Out of stock again (with duration) | `oos` (carries `available_seconds`) |
 
-The rule is **delivery-safe**: the event row and the new phase are persisted
-*only if the Gotify push succeeded*. If the alert fails to send, the product's
-state is reverted so the transition is retried on the next tick rather than
-silently lost. This means there is at most one event per real transition,
-which the history reconstruction relies on.
+Two further event kinds fire **independently of phase changes**:
+
+- **`new_product`** — a product code appears on a later poll that was not
+  present during the silent baseline (e.g. a new SKU added to the listing).
+  The alert shows current stock status and delivery info regardless of phase.
+- **`lead_time`** — an already-in-stock product's delivery ETA string changes
+  (detected by string comparison of the persisted `Product.delivery` value,
+  e.g. `"Delivery by Thu 3 Jul"` → `"Delivery by Fri 4 Jul"`). It fires
+  whenever the product was and remains in stock (both the previous and current
+  phase are non-`oos`) and the persisted delivery string changed — independent
+  of the stock-transition checks, though it can coincide with a phase change
+  (e.g., `early → public` with simultaneous delivery-date shift).
+
+All event kinds are **delivery-safe**: the event row (and any field updated by
+the transition) is persisted *only if the Gotify push succeeded*. For
+stock-phase, price-drop, and lead-time alerts, if the push fails the previous
+state is restored so the change is retried on the next tick. For `new_product`
+alerts, a failed push leaves the row in an `oos` baseline state (no Event
+created); the product then surfaces on a later tick via a normal phase-change
+event rather than being retried as a new-product alert. This means there is at
+most one event per real transition, which the history reconstruction relies on.
 
 ## Episode reconstruction
 
@@ -113,8 +132,9 @@ SQLAlchemy models in `backend/stocktrack/models/`:
   the current `availability` phase, `current_in_stock`, `current_price`,
   `basket_url`, and `available_since` (when the current buyable spell began).
 - **Event** — an immutable transition row: `kind` ∈ `early_access` / `public`
-  / `oos`, `ts`, `price`, and `available_seconds` (on `oos` events). This log
-  is the sole input to history reconstruction.
+  / `oos` / `new_product` / `lead_time`, `ts`, `price`, and `available_seconds`
+  (on `oos` events). `new_product` and `lead_time` are informational — history
+  reconstruction only consumes `early_access`, `public`, and `oos`.
 - **Setting** — a key/value store for runtime config. Secret values (the
   Gotify token) are stored Fernet-encrypted; `is_secret` flags them.
 

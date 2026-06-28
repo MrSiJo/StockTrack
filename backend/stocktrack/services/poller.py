@@ -8,7 +8,6 @@ from stocktrack.services import gotify
 from stocktrack.services.notify_format import fmt_price, human_duration, md_lines
 from stocktrack.services.settings_service import get as get_setting
 from stocktrack.services.settings_service import gotify_config
-from stocktrack.services.settings_service import truthy
 from stocktrack.sites import get_handler
 
 
@@ -64,6 +63,20 @@ def _public_msg(p):
     return md_lines(parts) or "now available"
 
 
+def _new_product_msg(p):
+    parts = []
+    status = "in stock" if p.in_stock else "out of stock"
+    if p.price is not None:
+        parts.append(f"**{fmt_price(p.price)}** — {status}")
+    else:
+        parts.append(status)
+    if p.delivery:
+        parts.append(p.delivery)
+    if p.url:
+        parts.append(f"[Open product page ↗]({p.url})")
+    return md_lines(parts) or "new product"
+
+
 def _oos_msg(p, secs):
     dur = human_duration(secs)
     parts = [f"Was buyable for ~{dur}." if dur else "Was briefly available."]
@@ -79,6 +92,13 @@ def is_price_drop(old, new, min_pct, min_abs) -> bool:
     drop = old - new
     pct = (drop / old) * 100 if old else 0
     return drop >= min_abs and pct >= min_pct
+
+
+def _lead_time_msg(p, old, new):
+    parts = [f"**{old or '—'} → {new or '—'}**"]
+    if p.url:
+        parts.append(f"[Open product page ↗]({p.url})")
+    return md_lines(parts)
 
 
 def _price_drop_msg(p, old, new) -> str:
@@ -124,15 +144,16 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     sender = sender or gotify.send
     now = now or datetime.now(timezone.utc)
 
+    from stocktrack.services.settings_service import store_config_kwargs
+    handler.configure(**await store_config_kwargs(session, handler))
     raw = await fetcher(handler, watch.url)
-    ea_days = int(await get_setting(session, "early_access_days", "30") or 30)
-    ao_member = truthy(await get_setting(session, "ao_member", "false"))
-    handler.configure(early_access_days=ea_days, ao_member=ao_member)
     parsed = [p for p in handler.parse(raw)
               if p.code and matches(p, watch.include_filter, watch.exclude_filter)]
 
     rows = {r.code: r for r in (await session.execute(
         select(Product).where(Product.watch_id == watch.id))).scalars().all()}
+
+    is_first_poll = len(rows) == 0
 
     cfg = await gotify_config(session, secret_key)
     restock_priority = int(await get_setting(session, "restock_priority", "8") or 8)
@@ -140,15 +161,51 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     drop_min_pct = float(await get_setting(session, "price_drop_min_pct", "5") or 5)
     drop_min_abs = float(await get_setting(session, "price_drop_min_abs", "5") or 5)
     drop_priority = int(await get_setting(session, "price_drop_priority", "6") or 6)
+    lead_time_priority = int(await get_setting(session, "lead_time_priority", "5") or 5)
     early_count = public_count = oos_count = price_drop_count = 0
+    new_product_count = lead_time_count = 0
 
     for p in parsed:
         row = rows.get(p.code)
+        if is_first_poll:
+            if row is None:
+                row = Product(watch_id=watch.id, store=watch.store, code=p.code,
+                              first_seen=now)
+                session.add(row)
+            curr = _phase(p.availability, p.in_stock)
+            row.title, row.brand, row.url = p.title, p.brand, p.url
+            row.basket_url, row.delivery = p.basket_url, p.delivery
+            row.current_price, row.last_checked, row.last_seen = p.price, now, now
+            row.availability = curr
+            row.current_in_stock = curr != "oos"
+            row.available_since = now if curr != "oos" else None
+            continue
+
         if row is None:
             row = Product(watch_id=watch.id, store=watch.store, code=p.code,
                           first_seen=now)
             session.add(row)
             await session.flush()
+            curr = _phase(p.availability, p.in_stock)
+            row.title, row.brand, row.url = p.title, p.brand, p.url
+            row.basket_url, row.delivery = p.basket_url, p.delivery
+            row.current_price, row.last_checked, row.last_seen = p.price, now, now
+            title = f"🆕 {watch.store} · New product: {p.title or p.code}"
+            ok = await asyncio.to_thread(
+                sender, cfg, title, _new_product_msg(p),
+                click_url=p.url or None, markdown=True, priority=restock_priority,
+            )
+            if ok:
+                session.add(Event(product_id=row.id, kind="new_product", price=p.price))
+                row.availability = curr
+                row.current_in_stock = curr != "oos"
+                row.available_since = now if curr != "oos" else None
+                new_product_count += 1
+            else:
+                row.availability = "oos"
+                row.current_in_stock = False
+                row.available_since = None
+            continue
 
         prev = _phase(row.availability, row.current_in_stock)
         curr = _phase(p.availability, p.in_stock)
@@ -156,8 +213,10 @@ async def check_watch(session, watch, *, secret_key, handler=None,
 
         # Refresh metadata regardless of phase
         old_price = row.current_price
+        old_delivery = row.delivery
         row.title, row.brand, row.url = p.title, p.brand, p.url
         row.basket_url = p.basket_url
+        row.delivery = p.delivery
         row.current_price, row.last_checked, row.last_seen = p.price, now, now
 
         if curr == prev:
@@ -228,6 +287,19 @@ async def check_watch(session, watch, *, secret_key, handler=None,
             else:
                 row.current_price = old_price  # delivery-safe: revert, retry next tick
 
+        if (prev != "oos" and curr != "oos"
+                and old_delivery and p.delivery and old_delivery != p.delivery):
+            title = f"🚚 {watch.store} · Delivery changed: {p.title or p.code}"
+            ok = await asyncio.to_thread(
+                sender, cfg, title, _lead_time_msg(p, old_delivery, p.delivery),
+                click_url=p.url or None, markdown=True, priority=lead_time_priority,
+            )
+            if ok:
+                session.add(Event(product_id=row.id, kind="lead_time", price=p.price))
+                lead_time_count += 1
+            else:
+                row.delivery = old_delivery  # delivery-safe: revert, retry next tick
+
     # Addendum A: update watch health on success
     watch.last_checked_at = now
     watch.last_ok_at = now
@@ -236,4 +308,5 @@ async def check_watch(session, watch, *, secret_key, handler=None,
 
     await session.commit()
     return {"parsed": len(parsed), "early": early_count, "public": public_count,
-            "oos": oos_count, "price_drops": price_drop_count}
+            "oos": oos_count, "price_drops": price_drop_count,
+            "new_products": new_product_count, "lead_time_changes": lead_time_count}

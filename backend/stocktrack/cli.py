@@ -7,11 +7,12 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message
 log = logging.getLogger("stocktrack.cli")
 
 
-async def _run_check(store: str, url: str, include: str, exclude: str) -> dict:
+async def _run_check(store: str, url: str, include: str, exclude: str,
+                     postcode: str = "", branch: str = "") -> dict:
     from stocktrack.sites import get_handler
 
     handler = get_handler(store)
-
+    handler.configure(cp_delivery_postcode=postcode, cp_collection_branch_id=branch)
     log.info("Fetching %s ...", url)
     raw = await asyncio.to_thread(handler.fetch, url)
 
@@ -47,10 +48,13 @@ def main(argv=None):
     parser.add_argument("url", help="Listing URL to fetch")
     parser.add_argument("--include", default="", help="Include filter (comma-separated)")
     parser.add_argument("--exclude", default="", help="Exclude filter (comma-separated)")
+    parser.add_argument("--postcode", default="", help="Delivery postcode (City Plumbing)")
+    parser.add_argument("--branch", default="", help="Collection branch ID (City Plumbing)")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args(argv)
 
-    result = asyncio.run(_run_check(args.store, args.url, args.include, args.exclude))
+    result = asyncio.run(_run_check(args.store, args.url, args.include, args.exclude,
+                                    args.postcode, args.branch))
 
     if args.json:
         import json

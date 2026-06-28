@@ -93,6 +93,20 @@ export function StoresPage() {
                                 }
                                 className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                               />
+                            ) : cfg.type === 'str' ? (
+                              <input
+                                type="text"
+                                value={drafts[cfg.key] ?? String(settingValue(cfg.key) ?? cfg.default)}
+                                onChange={(e) =>
+                                  setDrafts((d) => ({ ...d, [cfg.key]: e.target.value }))
+                                }
+                                onBlur={() => {
+                                  if (drafts[cfg.key] !== undefined)
+                                    saveSettings({ [cfg.key]: drafts[cfg.key] } as SettingsUpdate)
+                                  setDrafts((d) => { const { [cfg.key]: _omit, ...rest } = d; return rest })
+                                }}
+                                className="w-40 rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                              />
                             ) : (
                               <input
                                 type="number"
