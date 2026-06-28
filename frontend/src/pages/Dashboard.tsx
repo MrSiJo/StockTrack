@@ -40,6 +40,29 @@ function byPriceAsc(a: Product, b: Product): number {
   return pa - pb
 }
 
+// In stock = any non-oos phase (covers "public" and early-access "early").
+function isInStock(p: Product): boolean {
+  return p.availability !== 'oos'
+}
+
+// Sub-group divider row inside a watch's product table (in stock / out of stock).
+function SubHeader({ label, count, colSpan }: {
+  label: string
+  count: number
+  colSpan: number
+}) {
+  return (
+    <tr className="bg-gray-50">
+      <td
+        colSpan={colSpan}
+        className="px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500"
+      >
+        {label} · {count}
+      </td>
+    </tr>
+  )
+}
+
 function ProductRow({
   product,
   showLeadTime,
@@ -88,6 +111,8 @@ function WatchGroup({
   const [checkNote, setCheckNote] = useState<string | null>(null)
   const showLeadTime = watch.products.some((p) => p.delivery)
   const sortedProducts = [...watch.products].sort(byPriceAsc)
+  const inStockProducts = sortedProducts.filter(isInStock)
+  const oosProducts = sortedProducts.filter((p) => !isInStock(p))
   const colCount = showLeadTime ? 6 : 5
 
   const handleCheck = async () => {
@@ -162,9 +187,40 @@ function WatchGroup({
                 </td>
               </tr>
             ) : (
-              sortedProducts.map((p) => (
-                <ProductRow key={p.id} product={p} showLeadTime={showLeadTime} />
-              ))
+              <>
+                {inStockProducts.length > 0 && (
+                  <>
+                    <SubHeader
+                      label="In stock"
+                      count={inStockProducts.length}
+                      colSpan={colCount}
+                    />
+                    {inStockProducts.map((p) => (
+                      <ProductRow
+                        key={p.id}
+                        product={p}
+                        showLeadTime={showLeadTime}
+                      />
+                    ))}
+                  </>
+                )}
+                {oosProducts.length > 0 && (
+                  <>
+                    <SubHeader
+                      label="Out of stock"
+                      count={oosProducts.length}
+                      colSpan={colCount}
+                    />
+                    {oosProducts.map((p) => (
+                      <ProductRow
+                        key={p.id}
+                        product={p}
+                        showLeadTime={showLeadTime}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
             )}
           </tbody>
         </table>
