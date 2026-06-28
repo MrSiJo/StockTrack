@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 import pytest
 from stocktrack.sites import cityplumbing as cp

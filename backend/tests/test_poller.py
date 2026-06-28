@@ -64,7 +64,9 @@ async def test_first_poll_is_silent_baseline(sessionmaker_):
     from stocktrack.models import Event, Product as PModel, Watch
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
-        s.add(w); await s.commit(); wid = w.id
+        s.add(w)
+        await s.commit()
+        wid = w.id
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
         res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0)])
@@ -80,7 +82,9 @@ async def test_first_poll_is_silent_baseline(sessionmaker_):
 async def test_failed_public_send_does_not_advance_state(sessionmaker_):
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="Meaco", exclude_filter="")
-        s.add(w); await s.commit(); wid = w.id
+        s.add(w)
+        await s.commit()
+        wid = w.id
     # baseline OOS (silent)
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
@@ -240,7 +244,9 @@ async def test_delivery_persisted_on_product(sessionmaker_):
     from stocktrack.models import Product as PModel, Watch
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
-        s.add(w); await s.commit(); wid = w.id
+        s.add(w)
+        await s.commit()
+        wid = w.id
     # baseline poll then a second in-stock poll carrying a delivery string
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
@@ -318,7 +324,9 @@ async def test_new_product_alert_on_established_watch(sessionmaker_):
     from stocktrack.models import Event, Watch
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
-        s.add(w); await s.commit(); wid = w.id
+        s.add(w)
+        await s.commit()
+        wid = w.id
     # baseline with product A
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
@@ -337,10 +345,12 @@ async def test_new_product_alert_on_established_watch(sessionmaker_):
 
 async def test_new_product_send_failure_is_delivery_safe(sessionmaker_):
     from sqlalchemy import select
-    from stocktrack.models import Event, Product as PModel, Watch
+    from stocktrack.models import Event, Watch
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
-        s.add(w); await s.commit(); wid = w.id
+        s.add(w)
+        await s.commit()
+        wid = w.id
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
         await _run(s, w, [P("A", "Panel A", True, "", 100.0)])
@@ -358,7 +368,9 @@ async def test_lead_time_change_alert(sessionmaker_):
     from stocktrack.models import Event, Watch
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
-        s.add(w); await s.commit(); wid = w.id
+        s.add(w)
+        await s.commit()
+        wid = w.id
     # baseline in stock with delivery X
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
@@ -377,7 +389,9 @@ async def test_lead_time_no_alert_when_unchanged(sessionmaker_):
     from stocktrack.models import Watch
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
-        s.add(w); await s.commit(); wid = w.id
+        s.add(w)
+        await s.commit()
+        wid = w.id
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
         await _run(s, w, [P("A", "Panel", True, "", 100.0, delivery="Delivery by Mon 30 Jun (carrier)")])
