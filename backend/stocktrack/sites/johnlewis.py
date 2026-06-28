@@ -8,6 +8,7 @@ BASE = "https://www.johnlewis.com"
 
 class JohnLewisHandler(SiteHandler):
     name = "johnlewis"
+    kind = "listing"
 
     def fetch(self, url):
         return fetch_html(url)

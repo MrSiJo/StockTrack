@@ -127,3 +127,24 @@ def test_ao_product_blob_brace_in_string():
     assert len(prods) == 1
     assert prods[0].price == 519.0
     assert prods[0].code == "999001"
+
+
+def test_ao_handlers_share_settings_spec():
+    assert ao.AoHandler().settings_spec == ao.AO_SETTINGS
+    assert ao.AoProductHandler().settings_spec == ao.AO_SETTINGS
+    keys = {s["key"] for s in ao.AO_SETTINGS}
+    assert keys == {"ao_member"}
+    member = ao.AO_SETTINGS[0]
+    assert member["type"] == "bool" and member["default"] is False
+
+
+def test_handler_kinds_explicit():
+    from stocktrack.sites import johnlewis
+    assert ao.AoHandler.kind == "listing"
+    assert ao.AoProductHandler.kind == "product"
+    assert johnlewis.JohnLewisHandler.kind == "listing"
+
+
+def test_base_settings_spec_defaults_empty():
+    from stocktrack.sites import johnlewis
+    assert johnlewis.JohnLewisHandler().settings_spec == []
