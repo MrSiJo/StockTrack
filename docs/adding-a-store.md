@@ -21,8 +21,12 @@ phases, history, alerts) is store-agnostic.
   passed by the poller/preview (e.g. `early_access_days`, `ao_member`). The base
   is a no-op and ignores unknown kwargs.
 - **Singletons + registration** — create `handler = XHandler()` at module level
-  (plus a second instance for an extra kind, e.g. `product_handler`), then add
-  them to the `_HANDLERS` tuple in `sites/__init__.py`.
+  (plus a second instance for an extra kind, e.g. `product_handler`), then
+  register by: (a) adding `from . import <store>` to the imports at the top of
+  `sites/__init__.py`, and (b) adding the handler instance(s) to the inner
+  tuple of the `_HANDLERS` dict comprehension. `_HANDLERS` is a
+  `dict[tuple[str, str], SiteHandler]` keyed by `(name, kind)` — not a plain
+  tuple.
 
 ## The `Product` shape
 
@@ -55,8 +59,10 @@ Stores page renders each store's settings in a collapsible panel automatically;
 3. `fetch` via `fetch_html`; `parse` → `list[Product]` with a clear RuntimeError.
 4. (Optional) `configure` to consume settings; declare `settings_spec` and add
    each key to `SettingsOut`/`SettingsUpdate` + `seed_from_env` + `bootstrap`.
-5. Add `handler = <store>.handler` (and any extra-kind handler) to `_HANDLERS`
-   in `sites/__init__.py`.
+5. In `sites/__init__.py`, add `from . import <store>` to the imports at the
+   top of the file, then add `<store>.handler` (and any extra-kind handler,
+   e.g. `<store>.product_handler`) to the inner tuple of the `_HANDLERS` dict
+   comprehension.
 6. Add a **synthetic** fixture under `backend/tests/fixtures/` (fake codes,
    prices, URLs — never a real watch URL) and a `tests/test_sites_<store>.py`
    mirroring `tests/test_sites_ao.py`.
