@@ -62,6 +62,7 @@ async def test_seed_adds_price_drop_and_member_defaults(sessionmaker_):
         failure_alert_after=6, heartbeat_hours=0, early_access_days=30,
         ao_member=False, price_drop_min_pct=5, price_drop_min_abs=5,
         price_drop_priority=6, lead_time_priority=5, alert_group_threshold=3,
+        price_drop_in_stock_only=True,
         cp_delivery_postcode="", cp_collection_branch_id="",
     )
     async with sessionmaker_() as s:

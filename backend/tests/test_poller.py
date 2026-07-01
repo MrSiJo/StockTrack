@@ -449,6 +449,63 @@ async def test_failed_drop_send_keeps_price_ref(sessionmaker_):
 
 
 # ---------------------------------------------------------------------------
+# OOS gate for price alerts
+# ---------------------------------------------------------------------------
+
+async def test_no_drop_alert_while_oos_by_default(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", False, "", 519.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", False, "", 400.0)])
+        assert res.get("price_drops", 0) == 0
+        assert sent == []
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.current_price == 400.0   # truth still tracked silently
+
+
+async def test_oos_drop_alert_when_setting_off(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "price_drop_in_stock_only", "false")
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", False, "", 519.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, _ = await _run(s, w, [P("A", "Panel", False, "", 400.0)])
+        assert res["price_drops"] == 1
+
+
+async def test_target_fires_even_while_oos(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  price_target=100.0)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", False, "", 110.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", False, "", 95.0)])
+        assert res["price_targets"] == 1
+        assert any("Target price" in x["title"] for x in sent)
+
+
+# ---------------------------------------------------------------------------
 # Price-rise (up-recovery) alerts
 # ---------------------------------------------------------------------------
 

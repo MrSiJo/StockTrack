@@ -165,6 +165,7 @@ class SettingsOut(BaseModel):
     price_drop_priority: int
     lead_time_priority: int
     alert_group_threshold: int
+    price_drop_in_stock_only: bool
     cp_delivery_postcode: str
     cp_collection_branch_id: str
 
@@ -186,6 +187,7 @@ class SettingsUpdate(BaseModel):
     price_drop_priority: Optional[int] = None
     lead_time_priority: Optional[int] = None
     alert_group_threshold: Optional[int] = None
+    price_drop_in_stock_only: Optional[bool] = None
     cp_delivery_postcode: Optional[str] = None
     cp_collection_branch_id: Optional[str] = None
 

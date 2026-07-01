@@ -9,7 +9,7 @@ from stocktrack.models import Event, Product
 from stocktrack.services import gotify
 from stocktrack.services.notify_format import fmt_price, human_duration, md_lines
 from stocktrack.services.settings_service import get as get_setting
-from stocktrack.services.settings_service import gotify_config
+from stocktrack.services.settings_service import gotify_config, truthy
 from stocktrack.sites import get_handler
 
 
@@ -259,6 +259,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
         drop_min_abs = watch.price_drop_min_abs
     drop_priority = int(await get_setting(session, "price_drop_priority", "6") or 6)
     lead_time_priority = int(await get_setting(session, "lead_time_priority", "5") or 5)
+    in_stock_only = truthy(await get_setting(session, "price_drop_in_stock_only", "true"))
     counts = {"early": 0, "public": 0, "oos": 0, "price_drops": 0,
               "new_products": 0, "lead_time_changes": 0, "price_targets": 0,
               "new_lows": 0, "price_rises": 0}
@@ -403,7 +404,11 @@ async def check_watch(session, watch, *, secret_key, handler=None,
             row.price_ref = p.price
         ref_price = row.price_ref if row.price_ref is not None else old_price
 
-        if (watch.track_price_drops
+        # Drop/rise/new-low alerts are gated on being buyable by default;
+        # an explicit price_target is exempt (state always tracks silently).
+        price_alerts_ok = (not in_stock_only) or curr != "oos"
+
+        if (price_alerts_ok and watch.track_price_drops
                 and is_price_drop(ref_price, p.price, drop_min_pct, drop_min_abs)):
 
             def _pd_ok(row=row, p=p):
@@ -424,7 +429,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
                            f"{fmt_price(ref_price)} → {fmt_price(p.price)}",
             ))
 
-        if (watch.track_price_rises
+        if (price_alerts_ok and watch.track_price_rises
                 and is_price_rise(old_price, p.price, drop_min_pct, drop_min_abs)):
 
             def _pr_ok(row=row, p=p):
@@ -451,7 +456,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
                       and p.price < row.lowest_price)
         if p.price is not None and row.lowest_price is None:
             row.lowest_price = p.price
-        elif is_new_low and not watch.track_price_drops:
+        elif is_new_low and not (watch.track_price_drops and price_alerts_ok):
             row.lowest_price = p.price
         elif is_new_low:
             drop_alert = next((a for a in pending

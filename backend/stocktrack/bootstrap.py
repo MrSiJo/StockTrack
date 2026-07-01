@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     price_drop_priority: int = 6
     lead_time_priority: int = 5
     alert_group_threshold: int = 3
+    price_drop_in_stock_only: bool = True
     cp_delivery_postcode: str = ""
     cp_collection_branch_id: str = ""
     seed_ao_url: str = ""

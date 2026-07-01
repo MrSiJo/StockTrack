@@ -61,6 +61,9 @@ async def _read_settings(session: AsyncSession, secret_key: str) -> SettingsOut:
         price_drop_priority=int(await get(session, "price_drop_priority", "6") or 6),
         lead_time_priority=int(await get(session, "lead_time_priority", "5") or 5),
         alert_group_threshold=int(await get(session, "alert_group_threshold", "3") or 3),
+        price_drop_in_stock_only=truthy(
+            await get(session, "price_drop_in_stock_only", "true")
+        ),
         cp_delivery_postcode=await get(session, "cp_delivery_postcode", "") or "",
         cp_collection_branch_id=await get(session, "cp_collection_branch_id", "") or "",
     )
@@ -84,9 +87,10 @@ async def update_settings(
             await set_value(session, key, str(data[key]),
                             is_secret=False, secret_key=secret_key)
 
-    if "ao_member" in data:
-        await set_value(session, "ao_member", str(data["ao_member"]).lower(),
-                        is_secret=False, secret_key=secret_key)
+    for bool_key in ("ao_member", "price_drop_in_stock_only"):
+        if bool_key in data:
+            await set_value(session, bool_key, str(data[bool_key]).lower(),
+                            is_secret=False, secret_key=secret_key)
 
     # gotify_token: write-only; only update when a non-empty string is provided
     if data.get("gotify_token"):
