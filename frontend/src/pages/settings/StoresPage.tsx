@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useState } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { LoadingSpinner } from '../../components/LoadingSpinner'
+import { ErrorMessage } from '../../components/ErrorMessage'
 import type { SettingsUpdate } from '../../api/types'
 
 export function StoresPage() {
-  const { stores, settings, loading, fetchStores, fetchSettings, saveSettings } =
+  const { stores, settings, loading, error, fetchStores, fetchSettings, saveSettings } =
     useSettingsStore()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -22,6 +23,7 @@ export function StoresPage() {
   return (
     <div>
       <h1 className="mb-6 text-xl font-semibold text-gray-900">Stores</h1>
+      {error && <ErrorMessage message={error} />}
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
         <table className="min-w-full divide-y divide-gray-100">
           <thead>

@@ -96,16 +96,28 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set((s) => ({ watches: [...s.watches, watch] }))
   },
 
+  // Sets the store error for banner display AND rethrows so form callers can
+  // show their own inline message.
   editWatch: async (id, body) => {
-    const updated = await updateWatch(id, body)
-    set((s) => ({
-      watches: s.watches.map((w) => (w.id === id ? updated : w)),
-    }))
+    try {
+      const updated = await updateWatch(id, body)
+      set((s) => ({
+        watches: s.watches.map((w) => (w.id === id ? updated : w)),
+        error: null,
+      }))
+    } catch (e) {
+      set({ error: `Update failed: ${String(e)}` })
+      throw e
+    }
   },
 
   removeWatch: async (id) => {
-    await deleteWatch(id)
-    set((s) => ({ watches: s.watches.filter((w) => w.id !== id) }))
+    try {
+      await deleteWatch(id)
+      set((s) => ({ watches: s.watches.filter((w) => w.id !== id), error: null }))
+    } catch (e) {
+      set({ error: `Delete failed: ${String(e)}` })
+    }
   },
 
   preview: (body) => previewWatch(body),

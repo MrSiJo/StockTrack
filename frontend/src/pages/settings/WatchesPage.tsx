@@ -23,7 +23,9 @@ export function WatchesPage() {
     fetchStores()
   }, [fetchWatches, fetchStores])
 
-  const handleToggle = (w: Watch) => editWatch(w.id, { enabled: !w.enabled })
+  // editWatch already surfaces failures via the store error banner
+  const handleToggle = (w: Watch) =>
+    editWatch(w.id, { enabled: !w.enabled }).catch(() => {})
   const handleDelete = async (id: number) => {
     await removeWatch(id)
     setConfirmDelete(null)
