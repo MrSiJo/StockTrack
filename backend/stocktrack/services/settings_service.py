@@ -96,6 +96,9 @@ async def seed_from_env(session, env, secret_key: str) -> None:
         "lead_time_priority": (str(env.lead_time_priority), False),
         "alert_group_threshold": (str(env.alert_group_threshold), False),
         "price_drop_in_stock_only": (str(env.price_drop_in_stock_only).lower(), False),
+        "digest_cadence": (env.digest_cadence, False),
+        "digest_hour": (str(env.digest_hour), False),
+        "digest_priority": (str(env.digest_priority), False),
         "cp_delivery_postcode": (env.cp_delivery_postcode, False),
         "cp_collection_branch_id": (env.cp_collection_branch_id, False),
     }

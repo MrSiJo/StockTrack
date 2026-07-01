@@ -12,6 +12,7 @@ from stocktrack.db import init_models, make_engine, make_sessionmaker
 from stocktrack.models import Watch
 from stocktrack.seed import seed_default_watches
 from stocktrack.services import gotify
+from stocktrack.services.digest import digest_tick
 from stocktrack.services.poller import check_watch
 from stocktrack.services.settings_service import get as get_setting, gotify_config, seed_from_env
 
@@ -89,6 +90,11 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(poll_tick, "interval",
                       seconds=env.default_interval_seconds,
                       args=[sm, env.app_secret_key], id="poll", max_instances=1)
+    # Digest due-ness is checked against DB-owned settings every tick, so
+    # cadence/hour changes in the UI need no rescheduling.
+    scheduler.add_job(digest_tick, "interval", minutes=15,
+                      args=[sm, env.app_secret_key], kwargs={"tz": env.tz},
+                      id="digest", max_instances=1)
     scheduler.start()
 
     app.state.engine = engine

@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     lead_time_priority: int = 5
     alert_group_threshold: int = 3
     price_drop_in_stock_only: bool = True
+    digest_cadence: str = "off"
+    digest_hour: int = 8
+    digest_priority: int = 4
     cp_delivery_postcode: str = ""
     cp_collection_branch_id: str = ""
     seed_ao_url: str = ""

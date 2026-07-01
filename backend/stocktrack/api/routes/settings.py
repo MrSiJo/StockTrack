@@ -33,6 +33,9 @@ _PLAIN_SETTING_KEYS = [
     "price_drop_priority",
     "lead_time_priority",
     "alert_group_threshold",
+    "digest_cadence",
+    "digest_hour",
+    "digest_priority",
     "cp_delivery_postcode",
     "cp_collection_branch_id",
 ]
@@ -66,6 +69,9 @@ async def _read_settings(session: AsyncSession, secret_key: str) -> SettingsOut:
         price_drop_in_stock_only=truthy(
             await get(session, "price_drop_in_stock_only", "true")
         ),
+        digest_cadence=await get(session, "digest_cadence", "off") or "off",
+        digest_hour=int(await get(session, "digest_hour", "8") or 8),
+        digest_priority=int(await get(session, "digest_priority", "4") or 4),
         cp_delivery_postcode=await get(session, "cp_delivery_postcode", "") or "",
         cp_collection_branch_id=await get(session, "cp_collection_branch_id", "") or "",
     )
