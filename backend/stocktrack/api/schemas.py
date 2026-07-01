@@ -236,6 +236,9 @@ class HistorySummaryOut(BaseModel):
     episodes: int
     avg_buyable_seconds: Optional[float] = None
     avg_early_lead_seconds: Optional[float] = None
+    uptime_pct: float = 0.0
+    typical_window_seconds: Optional[int] = None
+    episodes_in_window: int = 0
 
 
 class ProductHistoryOut(BaseModel):
