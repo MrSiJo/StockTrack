@@ -19,6 +19,9 @@ class Product(Base):
     delivery: Mapped[str] = mapped_column(default="")
     current_in_stock: Mapped[bool] = mapped_column(default=False)
     current_price: Mapped[Optional[float]] = mapped_column(default=None)
+    # Local price peak since the last drop alert — drop thresholds compare
+    # against this so slow multi-tick creep still trips them.
+    price_ref: Mapped[Optional[float]] = mapped_column(default=None)
     available_since: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     last_checked: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     first_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

@@ -386,6 +386,69 @@ async def test_lead_time_change_alert(sessionmaker_):
 
 
 # ---------------------------------------------------------------------------
+# Price-creep reference
+# ---------------------------------------------------------------------------
+
+async def test_creep_accumulates_to_alert(sessionmaker_):
+    """A slow multi-tick decline alerts once the total drop from the local
+    peak trips the thresholds, even though each step is under-threshold."""
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "price_drop_min_pct", 1)
+        await _set(s, "price_drop_min_abs", 10)
+    for price, expect_drops in [(100.0, 0), (97.0, 0), (94.0, 0), (89.0, 1)]:
+        async with sessionmaker_() as s:
+            w = await s.get(Watch, wid)
+            res, sent = await _run(s, w, [P("A", "Panel", True, "", price)])
+            assert res.get("price_drops", 0) == expect_drops, price
+    async with sessionmaker_() as s:
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.price_ref == 89.0   # reset to the alerted-on price
+
+
+async def test_price_ref_resets_on_rise(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "price_drop_min_pct", 1)
+        await _set(s, "price_drop_min_abs", 10)
+    for price in [100.0, 95.0, 105.0]:
+        async with sessionmaker_() as s:
+            w = await s.get(Watch, wid)
+            await _run(s, w, [P("A", "Panel", True, "", price)])
+    async with sessionmaker_() as s:
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.price_ref == 105.0
+
+
+async def test_failed_drop_send_keeps_price_ref(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "price_drop_min_pct", 1)
+        await _set(s, "price_drop_min_abs", 10)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 100.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, _ = await _run(s, w, [P("A", "Panel", True, "", 89.0)], sends_ok=False)
+        assert res.get("price_drops", 0) == 0
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.price_ref == 100.0   # not advanced -> retries next tick
+
+
+# ---------------------------------------------------------------------------
 # Per-watch thresholds + target price
 # ---------------------------------------------------------------------------
 

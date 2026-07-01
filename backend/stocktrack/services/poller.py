@@ -244,6 +244,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
             row.title, row.brand, row.url = p.title, p.brand, p.url
             row.basket_url, row.delivery = p.basket_url, p.delivery
             row.current_price, row.last_checked, row.last_seen = p.price, now, now
+            row.price_ref = p.price
             row.availability = curr
             row.current_in_stock = curr != "oos"
             row.available_since = now if curr != "oos" else None
@@ -258,6 +259,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
             row.title, row.brand, row.url = p.title, p.brand, p.url
             row.basket_url, row.delivery = p.basket_url, p.delivery
             row.current_price, row.last_checked, row.last_seen = p.price, now, now
+            row.price_ref = p.price
             row.availability = "oos"
             row.current_in_stock = False
             row.available_since = None
@@ -361,11 +363,19 @@ async def check_watch(session, watch, *, secret_key, handler=None,
                 group_line=f"🔴 {p.title or p.code}: out of stock",
             ))
 
+        # Price-creep reference: rises (and backfill) reset it to the current
+        # price; drops leave it at the local peak so multi-tick creep
+        # accumulates until the thresholds trip.
+        if p.price is not None and (row.price_ref is None or p.price > row.price_ref):
+            row.price_ref = p.price
+        ref_price = row.price_ref if row.price_ref is not None else old_price
+
         if (watch.track_price_drops
-                and is_price_drop(old_price, p.price, drop_min_pct, drop_min_abs)):
+                and is_price_drop(ref_price, p.price, drop_min_pct, drop_min_abs)):
 
             def _pd_ok(row=row, p=p):
                 session.add(Event(product_id=row.id, kind="price_drop", price=p.price))
+                row.price_ref = p.price
                 counts["price_drops"] += 1
 
             def _pd_fail(row=row, old_price=old_price):
@@ -374,11 +384,11 @@ async def check_watch(session, watch, *, secret_key, handler=None,
             pending.append(PendingAlert(
                 row=row, kind="price_drop",
                 title=f"💸 {watch.store} · Price drop: {p.title or p.code}",
-                message=_price_drop_msg(p, old_price, p.price),
+                message=_price_drop_msg(p, ref_price, p.price),
                 click_url=p.url or None, priority=drop_priority,
                 on_success=_pd_ok, on_failure=_pd_fail,
                 group_line=f"💸 {p.title or p.code}: "
-                           f"{fmt_price(old_price)} → {fmt_price(p.price)}",
+                           f"{fmt_price(ref_price)} → {fmt_price(p.price)}",
             ))
 
         if (watch.price_target is not None and p.price is not None
