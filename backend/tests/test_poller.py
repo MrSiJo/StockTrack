@@ -449,6 +449,112 @@ async def test_failed_drop_send_keeps_price_ref(sessionmaker_):
 
 
 # ---------------------------------------------------------------------------
+# New-low (all-time-low) alerts
+# ---------------------------------------------------------------------------
+
+async def test_new_low_alert_standalone(sessionmaker_):
+    """An under-threshold drop that is still an all-time low alerts as new_low."""
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "price_drop_min_pct", 1)
+        await _set(s, "price_drop_min_abs", 10)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 100.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 98.0)])
+        assert res["new_lows"] == 1
+        assert res["price_drops"] == 0
+        assert len(sent) == 1 and "Lowest price ever" in sent[0]["title"]
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.lowest_price == 98.0
+
+
+async def test_new_low_merges_into_drop_push(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "price_drop_min_pct", 1)
+        await _set(s, "price_drop_min_abs", 10)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 100.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 85.0)])
+        assert res["price_drops"] == 1 and res["new_lows"] == 1
+        assert len(sent) == 1                      # merged: one push, not two
+        assert "Price drop" in sent[0]["title"]
+        kinds = {e.kind for e in (await s.execute(select(Event))).scalars().all()}
+        assert {"price_drop", "new_low"} <= kinds
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.lowest_price == 85.0
+
+
+async def test_new_low_silent_on_first_poll(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0)])
+        assert sent == []
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.lowest_price == 100.0
+
+
+async def test_new_low_tracks_silently_when_drops_untracked(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_drops=False)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 100.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 90.0)])
+        assert res.get("new_lows", 0) == 0 and sent == []
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.lowest_price == 90.0   # truth still tracked, just no alert
+
+
+async def test_failed_new_low_send_keeps_lowest_price(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_drops=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "price_drop_min_pct", 1)
+        await _set(s, "price_drop_min_abs", 10)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 100.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, _ = await _run(s, w, [P("A", "Panel", True, "", 98.0)], sends_ok=False)
+        assert res.get("new_lows", 0) == 0
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.lowest_price == 100.0   # not advanced -> re-alerts next tick
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert "new_low" not in kinds
+
+
+# ---------------------------------------------------------------------------
 # Per-watch thresholds + target price
 # ---------------------------------------------------------------------------
 

@@ -103,6 +103,15 @@ def _lead_time_msg(p, old, new):
     return md_lines(parts)
 
 
+def _new_low_msg(p) -> str:
+    parts = [f"**{fmt_price(p.price)}** — lowest price ever seen"]
+    if getattr(p, "delivery", ""):
+        parts.append(f"Delivery: {p.delivery}")
+    if p.url:
+        parts.append(f"[Open product page ↗]({p.url})")
+    return md_lines(parts)
+
+
 def _price_target_msg(p, target) -> str:
     parts = [f"**{fmt_price(p.price)}** — at or below your target of {fmt_price(target)}"]
     if getattr(p, "delivery", ""):
@@ -230,7 +239,8 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     drop_priority = int(await get_setting(session, "price_drop_priority", "6") or 6)
     lead_time_priority = int(await get_setting(session, "lead_time_priority", "5") or 5)
     counts = {"early": 0, "public": 0, "oos": 0, "price_drops": 0,
-              "new_products": 0, "lead_time_changes": 0, "price_targets": 0}
+              "new_products": 0, "lead_time_changes": 0, "price_targets": 0,
+              "new_lows": 0}
     pending: list[PendingAlert] = []
 
     for p in parsed:
@@ -245,6 +255,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
             row.basket_url, row.delivery = p.basket_url, p.delivery
             row.current_price, row.last_checked, row.last_seen = p.price, now, now
             row.price_ref = p.price
+            row.lowest_price = p.price
             row.availability = curr
             row.current_in_stock = curr != "oos"
             row.available_since = now if curr != "oos" else None
@@ -260,6 +271,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
             row.basket_url, row.delivery = p.basket_url, p.delivery
             row.current_price, row.last_checked, row.last_seen = p.price, now, now
             row.price_ref = p.price
+            row.lowest_price = p.price
             row.availability = "oos"
             row.current_in_stock = False
             row.available_since = None
@@ -390,6 +402,46 @@ async def check_watch(session, watch, *, secret_key, handler=None,
                 group_line=f"💸 {p.title or p.code}: "
                            f"{fmt_price(ref_price)} → {fmt_price(p.price)}",
             ))
+
+        # All-time-low tracking. Backfill/silent when drop alerts are off;
+        # otherwise lowest_price only advances via a delivered alert (or a
+        # merged line on this tick's drop push) so failures retry next tick.
+        is_new_low = (p.price is not None and row.lowest_price is not None
+                      and p.price < row.lowest_price)
+        if p.price is not None and row.lowest_price is None:
+            row.lowest_price = p.price
+        elif is_new_low and not watch.track_price_drops:
+            row.lowest_price = p.price
+        elif is_new_low:
+            drop_alert = next((a for a in pending
+                               if a.row is row and a.kind == "price_drop"), None)
+            if drop_alert is not None:
+                drop_alert.message = md_lines([drop_alert.message, "🏆 All-time low"])
+                drop_alert.group_line += " 🏆"
+                prev_ok = drop_alert.on_success
+
+                def _nl_merged_ok(row=row, p=p, prev_ok=prev_ok):
+                    prev_ok()
+                    session.add(Event(product_id=row.id, kind="new_low", price=p.price))
+                    row.lowest_price = p.price
+                    counts["new_lows"] += 1
+
+                drop_alert.on_success = _nl_merged_ok
+            else:
+                def _nl_ok(row=row, p=p):
+                    session.add(Event(product_id=row.id, kind="new_low", price=p.price))
+                    row.lowest_price = p.price
+                    counts["new_lows"] += 1
+
+                pending.append(PendingAlert(
+                    row=row, kind="new_low",
+                    title=f"🏆 {watch.store} · Lowest price ever: {p.title or p.code}",
+                    message=_new_low_msg(p),
+                    click_url=p.url or None, priority=drop_priority,
+                    on_success=_nl_ok, on_failure=lambda: None,
+                    group_line=f"🏆 {p.title or p.code}: "
+                               f"{fmt_price(p.price)} all-time low",
+                ))
 
         if (watch.price_target is not None and p.price is not None
                 and p.price <= watch.price_target

@@ -73,6 +73,7 @@ class ProductOut(BaseModel):
     delivery: str
     current_in_stock: bool
     current_price: Optional[float]
+    lowest_price: Optional[float]
     available_since: Optional[datetime]
     last_checked: Optional[datetime]
 
