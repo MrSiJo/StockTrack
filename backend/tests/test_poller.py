@@ -909,6 +909,30 @@ async def test_grouped_send_failure_reverts_all(sessionmaker_):
         assert all(not r.current_in_stock for r in rows)
 
 
+async def test_oos_to_instock_does_not_fire_lead_time(sessionmaker_):
+    """A delivery string appearing alongside an OOS->in-stock transition is
+    part of the restock, not a lead-time change."""
+    from stocktrack.models import Watch
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", False, "", 100.0,
+                            delivery="Delivery by Mon 30 Jun (carrier)")])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0,
+                                        delivery="Delivery by Thu 2 Jul (branch)")])
+        assert res["public"] == 1
+        assert res["lead_time_changes"] == 0
+        assert len(sent) == 1 and "In stock" in sent[0]["title"]
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert "lead_time" not in kinds
+
+
 async def test_lead_time_no_alert_when_unchanged(sessionmaker_):
     from stocktrack.models import Watch
     async with sessionmaker_() as s:
