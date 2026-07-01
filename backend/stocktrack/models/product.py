@@ -1,11 +1,8 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
-from stocktrack.models.base import Base, UTCDateTime
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+from stocktrack.models.base import Base, UTCDateTime, utcnow
 
 class Product(Base):
     __tablename__ = "product"
@@ -24,5 +21,5 @@ class Product(Base):
     current_price: Mapped[Optional[float]] = mapped_column(default=None)
     available_since: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     last_checked: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
-    first_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=_utcnow)
-    last_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=_utcnow)
+    first_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    last_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
