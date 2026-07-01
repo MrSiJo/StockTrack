@@ -8,6 +8,8 @@ import type {
   Store,
   PreviewRequest,
   PreviewProduct,
+  Product,
+  PricePoint,
   Settings,
   SettingsUpdate,
   CheckResult,
@@ -35,3 +37,9 @@ export const testGotify = () =>
   api.post<{ delivered: boolean }>('/settings/test')
 export const getHistory = (store?: string): Promise<ProductHistory[]> =>
   api.get<ProductHistory[]>(store ? `/history?store=${encodeURIComponent(store)}` : '/history')
+export const muteProduct = (id: number, hours: number) =>
+  api.post<Product>(`/products/${id}/mute`, { hours })
+export const unmuteProduct = (id: number) =>
+  api.delete<Product>(`/products/${id}/mute`)
+export const getPriceHistory = (id: number) =>
+  api.get<PricePoint[]>(`/products/${id}/price-history`)

@@ -16,8 +16,18 @@ export interface Product {
   delivery: string              // lead-time string (e.g. "Delivery by Mon 30 Jun (carrier)"); "" when none
   current_in_stock: boolean
   current_price: number | null
+  lowest_price: number | null
+  muted_until: string | null    // ISO datetime; product is muted until then
   available_since: string | null
   last_checked: string | null
+}
+
+// ── Price history (GET /api/products/{id}/price-history) ───────────────────
+
+export interface PricePoint {
+  ts: string
+  kind: string
+  price: number
 }
 
 export interface WatchStatus {
@@ -38,7 +48,8 @@ export interface WatchStatus {
 export interface StockEvent {
   id: number
   ts: string                   // ISO datetime
-  kind: 'early_access' | 'public' | 'oos' | 'price_drop' | 'new_product' | 'lead_time' | string
+  kind: 'early_access' | 'public' | 'oos' | 'price_drop' | 'new_product' | 'lead_time'
+      | 'new_low' | 'price_rise' | 'price_target' | string
   price: number | null
   available_seconds: number | null
   product_title: string
@@ -60,6 +71,10 @@ export interface Watch {
   interval_seconds: number
   enabled: boolean
   track_price_drops: boolean
+  track_price_rises: boolean
+  price_drop_min_pct: number | null
+  price_drop_min_abs: number | null
+  price_target: number | null
   created_at: string
   last_checked_at: string | null
   last_ok_at: string | null
@@ -77,6 +92,10 @@ export interface WatchCreate {
   interval_seconds?: number
   enabled?: boolean
   track_price_drops?: boolean
+  track_price_rises?: boolean
+  price_drop_min_pct?: number | null
+  price_drop_min_abs?: number | null
+  price_target?: number | null
 }
 
 export interface WatchUpdate {
@@ -89,6 +108,10 @@ export interface WatchUpdate {
   interval_seconds?: number
   enabled?: boolean
   track_price_drops?: boolean
+  track_price_rises?: boolean
+  price_drop_min_pct?: number | null   // explicit null clears the override
+  price_drop_min_abs?: number | null
+  price_target?: number | null
 }
 
 // ── Stores (GET /api/stores) ────────────────────────────────────────────────
@@ -147,6 +170,12 @@ export interface Settings {
   price_drop_min_abs: number
   price_drop_priority: number
   lead_time_priority: number
+  new_product_priority: number
+  alert_group_threshold: number
+  price_drop_in_stock_only: boolean
+  digest_cadence: string       // 'off' | 'daily' | 'weekly'
+  digest_hour: number
+  digest_priority: number
   cp_delivery_postcode: string
   cp_collection_branch_id: string
 }
@@ -177,6 +206,12 @@ export interface SettingsUpdate {
   price_drop_min_abs?: number
   price_drop_priority?: number
   lead_time_priority?: number
+  new_product_priority?: number
+  alert_group_threshold?: number
+  price_drop_in_stock_only?: boolean
+  digest_cadence?: string
+  digest_hour?: number
+  digest_priority?: number
   cp_delivery_postcode?: string
   cp_collection_branch_id?: string
 }
