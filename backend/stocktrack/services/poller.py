@@ -1,5 +1,7 @@
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Callable, Optional
 
 from sqlalchemy import select
 
@@ -137,6 +139,57 @@ def build_status_summary(watch, products) -> tuple[str, str]:
     return title, message
 
 
+@dataclass
+class PendingAlert:
+    """A staged notification. The branch that stages it writes state
+    optimistically; ``on_success`` persists the Event (delivery-safe),
+    ``on_failure`` reverts so the alert retries next tick."""
+    row: Product
+    kind: str
+    title: str
+    message: str
+    click_url: Optional[str]
+    priority: int
+    on_success: Callable[[], None]
+    on_failure: Callable[[], None]
+    group_line: str
+
+
+async def _dispatch(pending, cfg, sender, threshold, store, now) -> None:
+    """Send staged alerts and run each one's success/failure closure.
+
+    Muted products advance state silently (no push). When a tick stages
+    ``threshold``-or-more sendable alerts (0 disables grouping) they collapse
+    into one grouped push whose delivery outcome applies to all of them.
+    """
+    sendable = []
+    for a in pending:
+        muted_until = _utc(getattr(a.row, "muted_until", None))
+        if muted_until is not None and now < muted_until:
+            a.on_success()
+        else:
+            sendable.append(a)
+    if not sendable:
+        return
+    if threshold > 0 and len(sendable) >= threshold:
+        title = f"📦 {store} · {len(sendable)} updates"
+        message = md_lines([a.group_line for a in sendable])
+        priority = max(a.priority for a in sendable)
+        ok = await asyncio.to_thread(
+            sender, cfg, title, message,
+            click_url=sendable[0].click_url, markdown=True, priority=priority,
+        )
+        for a in sendable:
+            (a.on_success if ok else a.on_failure)()
+    else:
+        for a in sendable:
+            ok = await asyncio.to_thread(
+                sender, cfg, a.title, a.message,
+                click_url=a.click_url, markdown=True, priority=a.priority,
+            )
+            (a.on_success if ok else a.on_failure)()
+
+
 async def check_watch(session, watch, *, secret_key, handler=None,
                       fetcher=None, sender=None, now=None) -> dict:
     handler = handler or get_handler(watch.store, watch.kind)
@@ -162,8 +215,9 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     drop_min_abs = float(await get_setting(session, "price_drop_min_abs", "5") or 5)
     drop_priority = int(await get_setting(session, "price_drop_priority", "6") or 6)
     lead_time_priority = int(await get_setting(session, "lead_time_priority", "5") or 5)
-    early_count = public_count = oos_count = price_drop_count = 0
-    new_product_count = lead_time_count = 0
+    counts = {"early": 0, "public": 0, "oos": 0, "price_drops": 0,
+              "new_products": 0, "lead_time_changes": 0}
+    pending: list[PendingAlert] = []
 
     for p in parsed:
         row = rows.get(p.code)
@@ -190,21 +244,31 @@ async def check_watch(session, watch, *, secret_key, handler=None,
             row.title, row.brand, row.url = p.title, p.brand, p.url
             row.basket_url, row.delivery = p.basket_url, p.delivery
             row.current_price, row.last_checked, row.last_seen = p.price, now, now
-            title = f"🆕 {watch.store} · New product: {p.title or p.code}"
-            ok = await asyncio.to_thread(
-                sender, cfg, title, _new_product_msg(p),
-                click_url=p.url or None, markdown=True, priority=restock_priority,
-            )
-            if ok:
+            row.availability = "oos"
+            row.current_in_stock = False
+            row.available_since = None
+
+            def _np_ok(row=row, p=p, curr=curr):
                 session.add(Event(product_id=row.id, kind="new_product", price=p.price))
                 row.availability = curr
                 row.current_in_stock = curr != "oos"
                 row.available_since = now if curr != "oos" else None
-                new_product_count += 1
-            else:
+                counts["new_products"] += 1
+
+            def _np_fail(row=row):
                 row.availability = "oos"
                 row.current_in_stock = False
                 row.available_since = None
+
+            price_sfx = f" — {fmt_price(p.price)}" if p.price is not None else ""
+            pending.append(PendingAlert(
+                row=row, kind="new_product",
+                title=f"🆕 {watch.store} · New product: {p.title or p.code}",
+                message=_new_product_msg(p),
+                click_url=p.url or None, priority=restock_priority,
+                on_success=_np_ok, on_failure=_np_fail,
+                group_line=f"🆕 {p.title or p.code}: new product{price_sfx}",
+            ))
             continue
 
         prev = _phase(row.availability, row.current_in_stock)
@@ -228,77 +292,102 @@ async def check_watch(session, watch, *, secret_key, handler=None,
             new_since = prev_since if prev != "oos" else now
             row.available_since = new_since
             kind = "early_access" if curr == "early" else "public"
+            price_sfx = f" — {fmt_price(p.price)}" if p.price is not None else ""
             if curr == "early":
                 title = f"⚡ {watch.store} · Early access: {p.title or p.code}"
                 msg = _early_msg(p)
                 click = p.basket_url or p.url or None
+                line = f"⚡ {p.title or p.code}: early access{price_sfx}"
             else:
                 lbl = "Now public" if prev == "early" else "In stock"
                 title = f"🟢 {watch.store} · {lbl}: {p.title or p.code}"
                 msg = _public_msg(p)
                 click = p.url or None
-            ok = await asyncio.to_thread(
-                sender, cfg, title, msg,
-                click_url=click, markdown=True, priority=restock_priority,
-            )
-            if ok:
+                line = f"🟢 {p.title or p.code}: in stock{price_sfx}"
+
+            def _tr_ok(row=row, p=p, curr=curr, kind=kind):
                 session.add(Event(product_id=row.id, kind=kind, price=p.price))
                 row.availability = curr
                 row.current_in_stock = True
-                if curr == "early":
-                    early_count += 1
-                else:
-                    public_count += 1
-            else:
+                counts["early" if curr == "early" else "public"] += 1
+
+            def _tr_fail(row=row, prev=prev, prev_since=prev_since):
                 # Delivery-safe: revert
                 row.availability = prev
                 row.current_in_stock = prev != "oos"
                 row.available_since = prev_since
+
+            pending.append(PendingAlert(
+                row=row, kind=kind, title=title, message=msg, click_url=click,
+                priority=restock_priority, on_success=_tr_ok, on_failure=_tr_fail,
+                group_line=line,
+            ))
         else:  # curr == "oos"
             secs = (now - prev_since).total_seconds() if prev_since else None
-            title = f"🔴 {watch.store} · Out of stock again: {p.title or p.code}"
-            ok = await asyncio.to_thread(
-                sender, cfg, title, _oos_msg(p, secs),
-                click_url=p.url or None, markdown=True, priority=oos_priority,
-            )
-            if ok:
+
+            def _oos_ok(row=row, p=p, secs=secs):
                 session.add(Event(product_id=row.id, kind="oos", price=p.price,
                                   available_seconds=int(secs) if secs else None))
                 row.availability = "oos"
                 row.current_in_stock = False
                 row.available_since = None
-                oos_count += 1
-            else:
+                counts["oos"] += 1
+
+            def _oos_fail(row=row, prev=prev, prev_since=prev_since):
                 # Delivery-safe: keep it available
                 row.availability = prev
                 row.current_in_stock = True
                 row.available_since = prev_since
 
+            pending.append(PendingAlert(
+                row=row, kind="oos",
+                title=f"🔴 {watch.store} · Out of stock again: {p.title or p.code}",
+                message=_oos_msg(p, secs), click_url=p.url or None,
+                priority=oos_priority, on_success=_oos_ok, on_failure=_oos_fail,
+                group_line=f"🔴 {p.title or p.code}: out of stock",
+            ))
+
         if (watch.track_price_drops
                 and is_price_drop(old_price, p.price, drop_min_pct, drop_min_abs)):
-            title = f"💸 {watch.store} · Price drop: {p.title or p.code}"
-            ok = await asyncio.to_thread(
-                sender, cfg, title, _price_drop_msg(p, old_price, p.price),
-                click_url=p.url or None, markdown=True, priority=drop_priority,
-            )
-            if ok:
+
+            def _pd_ok(row=row, p=p):
                 session.add(Event(product_id=row.id, kind="price_drop", price=p.price))
-                price_drop_count += 1
-            else:
+                counts["price_drops"] += 1
+
+            def _pd_fail(row=row, old_price=old_price):
                 row.current_price = old_price  # delivery-safe: revert, retry next tick
+
+            pending.append(PendingAlert(
+                row=row, kind="price_drop",
+                title=f"💸 {watch.store} · Price drop: {p.title or p.code}",
+                message=_price_drop_msg(p, old_price, p.price),
+                click_url=p.url or None, priority=drop_priority,
+                on_success=_pd_ok, on_failure=_pd_fail,
+                group_line=f"💸 {p.title or p.code}: "
+                           f"{fmt_price(old_price)} → {fmt_price(p.price)}",
+            ))
 
         if (prev != "oos" and curr != "oos"
                 and old_delivery and p.delivery and old_delivery != p.delivery):
-            title = f"🚚 {watch.store} · Delivery changed: {p.title or p.code}"
-            ok = await asyncio.to_thread(
-                sender, cfg, title, _lead_time_msg(p, old_delivery, p.delivery),
-                click_url=p.url or None, markdown=True, priority=lead_time_priority,
-            )
-            if ok:
+
+            def _lt_ok(row=row, p=p):
                 session.add(Event(product_id=row.id, kind="lead_time", price=p.price))
-                lead_time_count += 1
-            else:
+                counts["lead_time_changes"] += 1
+
+            def _lt_fail(row=row, old_delivery=old_delivery):
                 row.delivery = old_delivery  # delivery-safe: revert, retry next tick
+
+            pending.append(PendingAlert(
+                row=row, kind="lead_time",
+                title=f"🚚 {watch.store} · Delivery changed: {p.title or p.code}",
+                message=_lead_time_msg(p, old_delivery, p.delivery),
+                click_url=p.url or None, priority=lead_time_priority,
+                on_success=_lt_ok, on_failure=_lt_fail,
+                group_line=f"🚚 {p.title or p.code}: delivery changed",
+            ))
+
+    threshold = int(await get_setting(session, "alert_group_threshold", "3") or 3)
+    await _dispatch(pending, cfg, sender, threshold, watch.store, now)
 
     # Addendum A: update watch health on success
     watch.last_checked_at = now
@@ -307,6 +396,4 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     watch.last_error = ""
 
     await session.commit()
-    return {"parsed": len(parsed), "early": early_count, "public": public_count,
-            "oos": oos_count, "price_drops": price_drop_count,
-            "new_products": new_product_count, "lead_time_changes": lead_time_count}
+    return {"parsed": len(parsed), **counts}

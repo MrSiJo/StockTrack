@@ -385,6 +385,84 @@ async def test_lead_time_change_alert(sessionmaker_):
         assert "lead_time" in kinds
 
 
+# ---------------------------------------------------------------------------
+# Alert grouping
+# ---------------------------------------------------------------------------
+
+async def test_alerts_grouped_when_threshold_met(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "alert_group_threshold", 3)
+    oos = [P("A", "Panel A", False, "", 100.0),
+           P("B", "Panel B", False, "", 150.0),
+           P("C", "Panel C", False, "", 200.0)]
+    instock = [P("A", "Panel A", True, "", 100.0),
+               P("B", "Panel B", True, "", 150.0),
+               P("C", "Panel C", True, "", 200.0)]
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, oos)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, instock)
+        assert res["public"] == 3
+        assert len(sent) == 1
+        assert "3 updates" in sent[0]["title"]
+        assert sent[0]["priority"] == 8  # max of the grouped restock alerts
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert kinds == ["public", "public", "public"]
+        rows = (await s.execute(select(Product))).scalars().all()
+        assert all(r.current_in_stock for r in rows)
+
+
+async def test_alerts_individual_below_threshold(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "alert_group_threshold", 3)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel A", False, "", 100.0),
+                          P("B", "Panel B", False, "", 150.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel A", True, "", 100.0),
+                                      P("B", "Panel B", True, "", 150.0)])
+        assert res["public"] == 2
+        assert len(sent) == 2
+        assert all("In stock" in x["title"] for x in sent)
+
+
+async def test_grouped_send_failure_reverts_all(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "alert_group_threshold", 3)
+    oos = [P("A", "Panel A", False, "", 100.0),
+           P("B", "Panel B", False, "", 150.0),
+           P("C", "Panel C", False, "", 200.0)]
+    instock = [P("A", "Panel A", True, "", 100.0),
+               P("B", "Panel B", True, "", 150.0),
+               P("C", "Panel C", True, "", 200.0)]
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, oos)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, _ = await _run(s, w, instock, sends_ok=False)
+        assert res["public"] == 0
+        assert (await s.execute(select(Event))).scalars().all() == []
+        rows = (await s.execute(select(Product))).scalars().all()
+        assert all(not r.current_in_stock for r in rows)
+
+
 async def test_lead_time_no_alert_when_unchanged(sessionmaker_):
     from stocktrack.models import Watch
     async with sessionmaker_() as s:

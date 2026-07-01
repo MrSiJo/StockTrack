@@ -93,6 +93,7 @@ async def seed_from_env(session, env, secret_key: str) -> None:
         "price_drop_min_abs": (str(env.price_drop_min_abs), False),
         "price_drop_priority": (str(env.price_drop_priority), False),
         "lead_time_priority": (str(env.lead_time_priority), False),
+        "alert_group_threshold": (str(env.alert_group_threshold), False),
         "cp_delivery_postcode": (env.cp_delivery_postcode, False),
         "cp_collection_branch_id": (env.cp_collection_branch_id, False),
     }
