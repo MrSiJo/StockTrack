@@ -105,7 +105,7 @@ function WatchGroup({
   onCheckNow,
 }: {
   watch: WatchStatus
-  onCheckNow: (id: number) => Promise<CheckResult | null>
+  onCheckNow: (id: number) => Promise<CheckResult>
 }) {
   const label = watch.label || watch.store
   const [checkNote, setCheckNote] = useState<string | null>(null)
@@ -117,14 +117,16 @@ function WatchGroup({
 
   const handleCheck = async () => {
     setCheckNote(null)
-    const result = await onCheckNow(watch.id)
-    if (result) {
+    try {
+      const result = await onCheckNow(watch.id)
       const inStock = result.early + result.public
       const total = result.parsed
       const notifSuffix = result.notified
         ? ', notified'
         : ' (Gotify not configured)'
       setCheckNote(`Checked — ${inStock}/${total} in stock${notifSuffix}`)
+    } catch (e) {
+      setCheckNote(`Check failed — ${String(e)}`)
     }
   }
 
@@ -237,9 +239,11 @@ export function Dashboard() {
     fetchAll()
   }, [fetchAll])
 
-  const handleCheckNow = async (id: number): Promise<CheckResult | null> => {
+  // checkNow throws on failure; fetchAll only runs after a successful check so
+  // a failed one can't clear still-valid data or its own error state.
+  const handleCheckNow = async (id: number): Promise<CheckResult> => {
     const result = await checkNow(id)
-    fetchAll()
+    await fetchAll()
     return result
   }
 
@@ -251,7 +255,9 @@ export function Dashboard() {
   )
 
   if (loading && watches.length === 0) return <LoadingSpinner />
-  if (error) return <ErrorMessage message={error} />
+  // Full-page error only when there's no data to show; once loaded, a failed
+  // refresh renders inline above the still-valid dashboard (as WatchesPage does).
+  if (error && watches.length === 0) return <ErrorMessage message={error} />
 
   return (
     <div>
@@ -264,6 +270,12 @@ export function Dashboard() {
           ↻ Refresh
         </button>
       </div>
+
+      {error && (
+        <div className="mb-4">
+          <ErrorMessage message={error} />
+        </div>
+      )}
 
       {hasEarlyAccess && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">

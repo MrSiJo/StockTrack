@@ -9,7 +9,8 @@ interface StatusState {
   error: string | null
   checkToast: string | null
   fetchAll: () => Promise<void>
-  checkNow: (id: number) => Promise<CheckResult | null>
+  // Throws on failure — callers surface the error next to the watch they checked.
+  checkNow: (id: number) => Promise<CheckResult>
   clearCheckToast: () => void
 }
 
@@ -33,15 +34,7 @@ export const useStatusStore = create<StatusState>((set) => ({
     }
   },
 
-  checkNow: async (id: number) => {
-    try {
-      const result = await checkWatchNow(id)
-      return result
-    } catch (e) {
-      set({ error: String(e) })
-      return null
-    }
-  },
+  checkNow: (id: number) => checkWatchNow(id),
 
   clearCheckToast: () => set({ checkToast: null }),
 }))

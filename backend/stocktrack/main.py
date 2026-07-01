@@ -24,6 +24,8 @@ async def poll_tick(sessionmaker, secret_key: str) -> None:
     for w in watches:
         async with sessionmaker() as s:
             watch = await s.get(Watch, w.id)
+            if watch is None:  # deleted via the API since this tick's snapshot
+                continue
             prev_failures = watch.consecutive_failures
             try:
                 res = await check_watch(s, watch, secret_key=secret_key)
@@ -41,6 +43,10 @@ async def poll_tick(sessionmaker, secret_key: str) -> None:
             except Exception as e:
                 await s.rollback()
                 watch = await s.get(Watch, w.id)
+                if watch is None:  # deleted while the check was in flight
+                    log.warning("[%s] check failed but watch was deleted mid-tick: %r",
+                                w.store, e)
+                    continue
                 from datetime import datetime, timezone
                 now = datetime.now(timezone.utc)
                 watch.consecutive_failures = prev_failures + 1
