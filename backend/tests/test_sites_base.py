@@ -53,3 +53,43 @@ def test_post_json_raises_on_non_200(monkeypatch):
     monkeypatch.setattr(creq, "Session", lambda *a, **k: _Sess(fake))
     with pytest.raises(RuntimeError):
         base.post_json("https://example.test/graphql", {"q": 1})
+
+
+class _SeqSess:
+    """Session whose post() pops queued responses and records impersonations."""
+    def __init__(self, responses, used):
+        self._responses = responses
+        self._used = used
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def post(self, url, json=None, headers=None, impersonate=None, timeout=None):
+        self._used.append(impersonate)
+        return self._responses.pop(0)
+
+
+def test_post_json_bot_wall_retries_next_impersonation(monkeypatch):
+    monkeypatch.setattr(base, "CURL_IMPERSONATE", "chrome")
+    monkeypatch.setattr(base, "FALLBACK_IMPERSONATIONS", ["firefox"])
+    monkeypatch.setattr(base, "_SUPPORTED_IMPERSONATIONS", None)
+    monkeypatch.setattr(base, "_curl_cffi_available", lambda: True)
+    responses = [_Resp(403, "blocked"), _Resp(200, '{"data": {"ok": true}}')]
+    used = []
+    import curl_cffi.requests as creq
+    monkeypatch.setattr(creq, "Session", lambda *a, **k: _SeqSess(responses, used))
+    out = base.post_json("https://example.test/graphql", {"q": 1})
+    assert out == {"data": {"ok": True}}
+    assert used == ["chrome", "firefox"]   # 403 -> tried the next impersonation
+
+
+def test_post_json_non_bot_wall_status_does_not_retry(monkeypatch):
+    monkeypatch.setattr(base, "CURL_IMPERSONATE", "chrome")
+    monkeypatch.setattr(base, "FALLBACK_IMPERSONATIONS", ["firefox"])
+    monkeypatch.setattr(base, "_SUPPORTED_IMPERSONATIONS", None)
+    monkeypatch.setattr(base, "_curl_cffi_available", lambda: True)
+    responses = [_Resp(500, "boom"), _Resp(200, '{"data": 1}')]
+    used = []
+    import curl_cffi.requests as creq
+    monkeypatch.setattr(creq, "Session", lambda *a, **k: _SeqSess(responses, used))
+    with pytest.raises(RuntimeError):
+        base.post_json("https://example.test/graphql", {"q": 1})
+    assert used == ["chrome"]   # 500 is not a bot wall -> no fallback attempt

@@ -56,6 +56,73 @@ async def test_poll_tick_records_failure_on_exception(sessionmaker_):
         assert "boom" in w2.last_error
 
 
+async def test_poll_tick_skips_recently_checked_watch(sessionmaker_):
+    """A watch checked more recently than its interval_seconds is skipped."""
+    from datetime import datetime, timedelta, timezone
+    from stocktrack.main import poll_tick
+    from stocktrack.models import Watch
+
+    now = datetime.now(timezone.utc)
+    async with sessionmaker_() as s:
+        s.add(Watch(store="fake", url="http://x", interval_seconds=3600,
+                    last_checked_at=now - timedelta(seconds=60), enabled=True))
+        await s.commit()
+
+    with patch("stocktrack.main.check_watch", new_callable=AsyncMock) as mock_check:
+        await poll_tick(sessionmaker_, KEY)
+    mock_check.assert_not_awaited()
+
+
+async def test_poll_tick_checks_stale_and_never_checked_watches(sessionmaker_):
+    from datetime import datetime, timedelta, timezone
+    from stocktrack.main import poll_tick
+    from stocktrack.models import Watch
+
+    now = datetime.now(timezone.utc)
+    async with sessionmaker_() as s:
+        s.add_all([
+            Watch(store="stale", url="http://x", interval_seconds=3600,
+                  last_checked_at=now - timedelta(hours=2), enabled=True),
+            Watch(store="fresh-run", url="http://y", interval_seconds=300,
+                  last_checked_at=None, enabled=True),
+        ])
+        await s.commit()
+
+    checked = []
+
+    async def fake_check(session, watch, secret_key=None):
+        checked.append(watch.store)
+        return {}
+
+    with patch("stocktrack.main.check_watch", side_effect=fake_check):
+        await poll_tick(sessionmaker_, KEY)
+    assert sorted(checked) == ["fresh-run", "stale"]
+
+
+async def test_poll_tick_failed_watch_retries_next_tick(sessionmaker_):
+    """Failures update last_checked_at, but a failing watch keeps retrying at
+    the global tick cadence only until its own interval gates it again."""
+    from datetime import datetime, timedelta, timezone
+    from stocktrack.main import poll_tick
+    from stocktrack.models import Watch
+
+    now = datetime.now(timezone.utc)
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="http://x", interval_seconds=60,
+                  last_checked_at=now - timedelta(seconds=120), enabled=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+
+    with patch("stocktrack.main.check_watch", new_callable=AsyncMock,
+               side_effect=RuntimeError("boom")):
+        await poll_tick(sessionmaker_, KEY)
+
+    async with sessionmaker_() as s:
+        w2 = await s.get(Watch, wid)
+        assert w2.consecutive_failures == 1  # was due, got checked, failed
+
+
 async def test_poll_tick_skips_watch_deleted_before_check(sessionmaker_):
     """A watch deleted between the tick's snapshot and its re-fetch is skipped,
     and later watches in the same tick still get checked."""

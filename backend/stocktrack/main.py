@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
@@ -11,6 +12,7 @@ from stocktrack.db import init_models, make_engine, make_sessionmaker
 from stocktrack.models import Watch
 from stocktrack.seed import seed_default_watches
 from stocktrack.services import gotify
+from stocktrack.services.digest import digest_tick
 from stocktrack.services.poller import check_watch
 from stocktrack.services.settings_service import get as get_setting, gotify_config, seed_from_env
 
@@ -21,11 +23,18 @@ async def poll_tick(sessionmaker, secret_key: str) -> None:
     async with sessionmaker() as s:
         watches = (await s.execute(
             select(Watch).where(Watch.enabled.is_(True)))).scalars().all()
+    tick_now = datetime.now(timezone.utc)
     for w in watches:
         async with sessionmaker() as s:
             watch = await s.get(Watch, w.id)
             if watch is None:  # deleted via the API since this tick's snapshot
                 continue
+            # Honor the per-watch cadence: the global tick is the resolution,
+            # a watch checked more recently than its own interval waits.
+            if watch.last_checked_at is not None:
+                age = (tick_now - watch.last_checked_at).total_seconds()
+                if age < watch.interval_seconds:
+                    continue
             prev_failures = watch.consecutive_failures
             try:
                 res = await check_watch(s, watch, secret_key=secret_key)
@@ -47,7 +56,6 @@ async def poll_tick(sessionmaker, secret_key: str) -> None:
                     log.warning("[%s] check failed but watch was deleted mid-tick: %r",
                                 w.store, e)
                     continue
-                from datetime import datetime, timezone
                 now = datetime.now(timezone.utc)
                 watch.consecutive_failures = prev_failures + 1
                 watch.last_checked_at = now
@@ -82,6 +90,11 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(poll_tick, "interval",
                       seconds=env.default_interval_seconds,
                       args=[sm, env.app_secret_key], id="poll", max_instances=1)
+    # Digest due-ness is checked against DB-owned settings every tick, so
+    # cadence/hour changes in the UI need no rescheduling.
+    scheduler.add_job(digest_tick, "interval", minutes=15,
+                      args=[sm, env.app_secret_key], kwargs={"tz": env.tz},
+                      id="digest", max_instances=1)
     scheduler.start()
 
     app.state.engine = engine
@@ -98,6 +111,7 @@ def create_app() -> FastAPI:
     from fastapi.middleware.cors import CORSMiddleware
     from stocktrack.api.routes.events import router as events_router
     from stocktrack.api.routes.history import router as history_router
+    from stocktrack.api.routes.products import router as products_router
     from stocktrack.api.routes.settings import router as settings_router
     from stocktrack.api.routes.status import router as status_router
     from stocktrack.api.routes.stores import router as stores_router
@@ -120,6 +134,7 @@ def create_app() -> FastAPI:
     app.include_router(status_router, prefix="/api")
     app.include_router(events_router, prefix="/api")
     app.include_router(history_router, prefix="/api")
+    app.include_router(products_router, prefix="/api")
     app.include_router(stores_router, prefix="/api")
     app.include_router(watches_router, prefix="/api")
     app.include_router(settings_router, prefix="/api")

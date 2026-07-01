@@ -36,6 +36,17 @@ export function WatchForm({ initial, onClose }: Props) {
   )
   const [enabled, setEnabled] = useState(initial?.enabled ?? true)
   const [trackPriceDrops, setTrackPriceDrops] = useState(initial?.track_price_drops ?? false)
+  const [trackPriceRises, setTrackPriceRises] = useState(initial?.track_price_rises ?? false)
+  // Per-watch overrides: '' means "use the global setting" (null on the API)
+  const [dropMinPct, setDropMinPct] = useState(
+    initial?.price_drop_min_pct != null ? String(initial.price_drop_min_pct) : '',
+  )
+  const [dropMinAbs, setDropMinAbs] = useState(
+    initial?.price_drop_min_abs != null ? String(initial.price_drop_min_abs) : '',
+  )
+  const [priceTarget, setPriceTarget] = useState(
+    initial?.price_target != null ? String(initial.price_target) : '',
+  )
 
   const [previewProducts, setPreviewProducts] = useState<
     PreviewProduct[] | null
@@ -80,6 +91,10 @@ export function WatchForm({ initial, onClose }: Props) {
         interval_seconds: Number(intervalSeconds),
         enabled,
         track_price_drops: trackPriceDrops,
+        track_price_rises: trackPriceRises,
+        price_drop_min_pct: dropMinPct === '' ? null : Number(dropMinPct),
+        price_drop_min_abs: dropMinAbs === '' ? null : Number(dropMinAbs),
+        price_target: priceTarget === '' ? null : Number(priceTarget),
       }
       if (initial) {
         await editWatch(initial.id, body)
@@ -228,6 +243,60 @@ export function WatchForm({ initial, onClose }: Props) {
               />
               Alert on price drops
             </label>
+            <label className="flex cursor-pointer items-center gap-2 pb-1.5 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={trackPriceRises}
+                onChange={(e) => setTrackPriceRises(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              Alert on price rises
+            </label>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-700">
+              Min drop % (blank = global)
+            </label>
+            <input
+              type="number"
+              value={dropMinPct}
+              onChange={(e) => setDropMinPct(e.target.value)}
+              min={0}
+              step="any"
+              placeholder="global"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-700">
+              Min drop £ (blank = global)
+            </label>
+            <input
+              type="number"
+              value={dropMinAbs}
+              onChange={(e) => setDropMinAbs(e.target.value)}
+              min={0}
+              step="any"
+              placeholder="global"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-700">
+              Target price £ (alerts at ≤)
+            </label>
+            <input
+              type="number"
+              value={priceTarget}
+              onChange={(e) => setPriceTarget(e.target.value)}
+              min={0}
+              step="any"
+              placeholder="none"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
           </div>
         </div>
 

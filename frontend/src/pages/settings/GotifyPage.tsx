@@ -17,6 +17,13 @@ interface GotifyForm {
   price_drop_min_pct: number
   price_drop_min_abs: number
   price_drop_priority: number
+  lead_time_priority: number
+  new_product_priority: number
+  alert_group_threshold: number
+  price_drop_in_stock_only: boolean
+  digest_cadence: string
+  digest_hour: number
+  digest_priority: number
 }
 
 const EMPTY_FORM: GotifyForm = {
@@ -33,6 +40,13 @@ const EMPTY_FORM: GotifyForm = {
   price_drop_min_pct: 5,
   price_drop_min_abs: 5,
   price_drop_priority: 6,
+  lead_time_priority: 5,
+  new_product_priority: 8,
+  alert_group_threshold: 3,
+  price_drop_in_stock_only: true,
+  digest_cadence: 'off',
+  digest_hour: 8,
+  digest_priority: 4,
 }
 
 export function GotifyPage() {
@@ -65,6 +79,13 @@ export function GotifyPage() {
         price_drop_min_pct: settings.price_drop_min_pct,
         price_drop_min_abs: settings.price_drop_min_abs,
         price_drop_priority: settings.price_drop_priority,
+        lead_time_priority: settings.lead_time_priority,
+        new_product_priority: settings.new_product_priority,
+        alert_group_threshold: settings.alert_group_threshold,
+        price_drop_in_stock_only: settings.price_drop_in_stock_only,
+        digest_cadence: settings.digest_cadence,
+        digest_hour: settings.digest_hour,
+        digest_priority: settings.digest_priority,
       })
       setTokenDirty(false)
     }
@@ -94,6 +115,13 @@ export function GotifyPage() {
         price_drop_min_pct: form.price_drop_min_pct,
         price_drop_min_abs: form.price_drop_min_abs,
         price_drop_priority: form.price_drop_priority,
+        lead_time_priority: form.lead_time_priority,
+        new_product_priority: form.new_product_priority,
+        alert_group_threshold: form.alert_group_threshold,
+        price_drop_in_stock_only: form.price_drop_in_stock_only,
+        digest_cadence: form.digest_cadence,
+        digest_hour: form.digest_hour,
+        digest_priority: form.digest_priority,
       })
       setTokenDirty(false)
     } catch (e) {
@@ -209,6 +237,45 @@ export function GotifyPage() {
                 max={10}
               />
             </div>
+            <div>
+              <label className={labelClass}>New product</label>
+              <input
+                type="number"
+                value={form.new_product_priority}
+                onChange={(e) =>
+                  set('new_product_priority', Number(e.target.value))
+                }
+                className={inputClass}
+                min={1}
+                max={10}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Lead time</label>
+              <input
+                type="number"
+                value={form.lead_time_priority}
+                onChange={(e) =>
+                  set('lead_time_priority', Number(e.target.value))
+                }
+                className={inputClass}
+                min={1}
+                max={10}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Group alerts at ≥ (0 = off)</label>
+              <input
+                type="number"
+                value={form.alert_group_threshold}
+                onChange={(e) =>
+                  set('alert_group_threshold', Number(e.target.value))
+                }
+                className={inputClass}
+                min={0}
+                max={50}
+              />
+            </div>
           </div>
           <div>
             <label className={labelClass}>Send retries</label>
@@ -308,6 +375,49 @@ export function GotifyPage() {
                 className={inputClass} />
             </div>
           </div>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={form.price_drop_in_stock_only}
+              onChange={(e) => set('price_drop_in_stock_only', e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Only alert on price changes while in stock
+          </label>
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-gray-800">Digest</h2>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className={labelClass}>Cadence</label>
+              <select
+                value={form.digest_cadence}
+                onChange={(e) => set('digest_cadence', e.target.value)}
+                className={inputClass}
+              >
+                <option value="off">Off</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly (Mondays)</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Send after hour</label>
+              <input type="number" min={0} max={23} value={form.digest_hour}
+                onChange={(e) => set('digest_hour', Number(e.target.value))}
+                className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Priority</label>
+              <input type="number" min={1} max={10} value={form.digest_priority}
+                onChange={(e) => set('digest_priority', Number(e.target.value))}
+                className={inputClass} />
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">
+            One roll-up push per day (or week) with what's in stock and what
+            changed — checked every 15 minutes against the server timezone.
+          </p>
         </div>
 
         <div className="flex items-center gap-3 pt-1">

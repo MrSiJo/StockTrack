@@ -6,6 +6,9 @@ function eventIcon(kind: string): string {
   if (kind === 'price_drop') return '💸'
   if (kind === 'new_product') return '🆕'
   if (kind === 'lead_time') return '🚚'
+  if (kind === 'new_low') return '🏆'
+  if (kind === 'price_rise') return '📈'
+  if (kind === 'price_target') return '🎯'
   return '🔴'
 }
 
@@ -15,6 +18,9 @@ function eventLabel(kind: string): string {
   if (kind === 'price_drop') return 'price drop'
   if (kind === 'new_product') return 'new product'
   if (kind === 'lead_time') return 'delivery changed'
+  if (kind === 'new_low') return 'all-time low'
+  if (kind === 'price_rise') return 'price back up'
+  if (kind === 'price_target') return 'target price hit'
   return 'out of stock again'
 }
 

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     gotify_token: str = ""
     gotify_priority: int = 7
     restock_priority: int = 8
+    new_product_priority: int = 8
     oos_priority: int = 4
     gotify_send_retries: int = 3
     failure_alert_after: int = 6
@@ -27,6 +28,11 @@ class Settings(BaseSettings):
     price_drop_min_abs: float = 5
     price_drop_priority: int = 6
     lead_time_priority: int = 5
+    alert_group_threshold: int = 3
+    price_drop_in_stock_only: bool = True
+    digest_cadence: str = "off"
+    digest_hour: int = 8
+    digest_priority: int = 4
     cp_delivery_postcode: str = ""
     cp_collection_branch_id: str = ""
     seed_ao_url: str = ""

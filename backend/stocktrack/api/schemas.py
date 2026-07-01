@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ── Watch ──────────────────────────────────────────────────────────────────
@@ -18,6 +18,10 @@ class WatchOut(BaseModel):
     enabled: bool
     kind: str
     track_price_drops: bool
+    track_price_rises: bool
+    price_drop_min_pct: Optional[float]
+    price_drop_min_abs: Optional[float]
+    price_target: Optional[float]
     created_at: datetime
     last_checked_at: Optional[datetime]
     last_ok_at: Optional[datetime]
@@ -35,6 +39,10 @@ class WatchCreate(BaseModel):
     enabled: bool = True
     kind: str = "listing"
     track_price_drops: bool = False
+    track_price_rises: bool = False
+    price_drop_min_pct: Optional[float] = None
+    price_drop_min_abs: Optional[float] = None
+    price_target: Optional[float] = None
 
 
 class WatchUpdate(BaseModel):
@@ -47,6 +55,10 @@ class WatchUpdate(BaseModel):
     enabled: Optional[bool] = None
     kind: Optional[str] = None
     track_price_drops: Optional[bool] = None
+    track_price_rises: Optional[bool] = None
+    price_drop_min_pct: Optional[float] = None
+    price_drop_min_abs: Optional[float] = None
+    price_target: Optional[float] = None
 
 
 # ── Status ─────────────────────────────────────────────────────────────────
@@ -64,8 +76,20 @@ class ProductOut(BaseModel):
     delivery: str
     current_in_stock: bool
     current_price: Optional[float]
+    lowest_price: Optional[float]
+    muted_until: Optional[datetime]
     available_since: Optional[datetime]
     last_checked: Optional[datetime]
+
+
+class MuteIn(BaseModel):
+    hours: int = Field(ge=1, le=24 * 30)
+
+
+class PricePointOut(BaseModel):
+    ts: datetime
+    kind: str
+    price: float
 
 
 class WatchStatusOut(BaseModel):
@@ -140,6 +164,7 @@ class SettingsOut(BaseModel):
     gotify_token_set: bool
     gotify_priority: int
     restock_priority: int
+    new_product_priority: int
     oos_priority: int
     gotify_send_retries: int
     default_interval_seconds: int
@@ -151,6 +176,11 @@ class SettingsOut(BaseModel):
     price_drop_min_abs: float
     price_drop_priority: int
     lead_time_priority: int
+    alert_group_threshold: int
+    price_drop_in_stock_only: bool
+    digest_cadence: str
+    digest_hour: int
+    digest_priority: int
     cp_delivery_postcode: str
     cp_collection_branch_id: str
 
@@ -160,6 +190,7 @@ class SettingsUpdate(BaseModel):
     gotify_token: Optional[str] = None   # write-only; never returned
     gotify_priority: Optional[int] = None
     restock_priority: Optional[int] = None
+    new_product_priority: Optional[int] = None
     oos_priority: Optional[int] = None
     gotify_send_retries: Optional[int] = None
     default_interval_seconds: Optional[int] = None
@@ -171,6 +202,11 @@ class SettingsUpdate(BaseModel):
     price_drop_min_abs: Optional[float] = None
     price_drop_priority: Optional[int] = None
     lead_time_priority: Optional[int] = None
+    alert_group_threshold: Optional[int] = None
+    price_drop_in_stock_only: Optional[bool] = None
+    digest_cadence: Optional[str] = None
+    digest_hour: Optional[int] = None
+    digest_priority: Optional[int] = None
     cp_delivery_postcode: Optional[str] = None
     cp_collection_branch_id: Optional[str] = None
 
@@ -200,6 +236,9 @@ class HistorySummaryOut(BaseModel):
     episodes: int
     avg_buyable_seconds: Optional[float] = None
     avg_early_lead_seconds: Optional[float] = None
+    uptime_pct: float = 0.0
+    typical_window_seconds: Optional[int] = None
+    episodes_in_window: int = 0
 
 
 class ProductHistoryOut(BaseModel):

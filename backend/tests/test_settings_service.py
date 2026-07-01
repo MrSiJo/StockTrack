@@ -58,10 +58,13 @@ async def test_seed_adds_price_drop_and_member_defaults(sessionmaker_):
     from stocktrack.services.settings_service import get, seed_from_env
     env = SimpleNamespace(
         gotify_url="", gotify_token="", gotify_priority=7, restock_priority=8,
+        new_product_priority=8,
         oos_priority=4, gotify_send_retries=3, default_interval_seconds=300,
         failure_alert_after=6, heartbeat_hours=0, early_access_days=30,
         ao_member=False, price_drop_min_pct=5, price_drop_min_abs=5,
-        price_drop_priority=6, lead_time_priority=5,
+        price_drop_priority=6, lead_time_priority=5, alert_group_threshold=3,
+        price_drop_in_stock_only=True,
+        digest_cadence="off", digest_hour=8, digest_priority=4,
         cp_delivery_postcode="", cp_collection_branch_id="",
     )
     async with sessionmaker_() as s:
@@ -70,3 +73,4 @@ async def test_seed_adds_price_drop_and_member_defaults(sessionmaker_):
         assert await get(s, "price_drop_min_pct") == "5"
         assert await get(s, "price_drop_min_abs") == "5"
         assert await get(s, "price_drop_priority") == "6"
+        assert await get(s, "alert_group_threshold") == "3"

@@ -21,6 +21,9 @@ export interface ProductHistory {
     episodes: number
     avg_buyable_seconds: number | null
     avg_early_lead_seconds: number | null
+    uptime_pct: number
+    typical_window_seconds: number | null
+    episodes_in_window: number
   }
   episodes: Episode[]
 }

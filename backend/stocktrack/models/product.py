@@ -1,11 +1,8 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
-from stocktrack.models.base import Base, UTCDateTime
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+from stocktrack.models.base import Base, UTCDateTime, utcnow
 
 class Product(Base):
     __tablename__ = "product"
@@ -22,7 +19,12 @@ class Product(Base):
     delivery: Mapped[str] = mapped_column(default="")
     current_in_stock: Mapped[bool] = mapped_column(default=False)
     current_price: Mapped[Optional[float]] = mapped_column(default=None)
+    # Local price peak since the last drop alert — drop thresholds compare
+    # against this so slow multi-tick creep still trips them.
+    price_ref: Mapped[Optional[float]] = mapped_column(default=None)
+    lowest_price: Mapped[Optional[float]] = mapped_column(default=None)
+    muted_until: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     available_since: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     last_checked: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
-    first_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=_utcnow)
-    last_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=_utcnow)
+    first_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    last_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from datetime import datetime
-from statistics import mean
+from datetime import datetime, timedelta
+from statistics import mean, median
 from typing import Iterable, Optional
 
 
@@ -60,6 +60,36 @@ def build_episodes(events: Iterable, now: datetime) -> "list[Episode]":
     return episodes
 
 
+def availability_stats(episodes: "list[Episode]", now: datetime,
+                       window_days: int = 7) -> dict:
+    """Pure availability roll-up over a trailing window.
+
+    uptime_pct = buyable seconds overlapping the window / window length;
+    typical_window_seconds = median full duration of episodes touching the
+    window (ongoing ones measured to ``now``).
+    """
+    window_start = now - timedelta(days=window_days)
+    window_secs = window_days * 86400
+    overlap_total = 0.0
+    durations = []
+    n = 0
+    for ep in episodes:
+        end = ep.ended_ts if ep.ended_ts is not None else now
+        o_start = max(ep.started_ts, window_start)
+        o_end = min(end, now)
+        if o_end <= o_start:
+            continue
+        n += 1
+        overlap_total += (o_end - o_start).total_seconds()
+        if ep.buyable_seconds is not None:
+            durations.append(ep.buyable_seconds)
+    return {
+        "uptime_pct": round(100 * overlap_total / window_secs, 1),
+        "typical_window_seconds": int(median(durations)) if durations else None,
+        "episodes_in_window": n,
+    }
+
+
 def build_history(products_events, now: datetime, store: "str | None" = None) -> "list[dict]":
     """Group reconstructed episodes by product with summary stats.
 
@@ -83,7 +113,8 @@ def build_history(products_events, now: datetime, store: "str | None" = None) ->
                         "url": product.url, "basket_url": product.basket_url},
             "summary": {"episodes": len(eps),
                         "avg_buyable_seconds": (mean(buyables) if buyables else None),
-                        "avg_early_lead_seconds": (mean(leads) if leads else None)},
+                        "avg_early_lead_seconds": (mean(leads) if leads else None),
+                        **availability_stats(eps, now)},
             "episodes": [
                 {"started_ts": e.started_ts, "early_access_ts": e.early_access_ts,
                  "public_ts": e.public_ts, "ended_ts": e.ended_ts, "ongoing": e.ongoing,

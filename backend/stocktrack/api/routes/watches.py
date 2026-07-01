@@ -145,6 +145,11 @@ async def update_watch(
             detail=f"Store {new_store!r} does not support kind {new_kind!r}")
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(w, field, value)
+    # Nullable overrides: an explicit null in the body clears the override
+    # (exclude_none above would otherwise make them impossible to unset).
+    for field in ("price_drop_min_pct", "price_drop_min_abs", "price_target"):
+        if field in body.model_fields_set and getattr(body, field) is None:
+            setattr(w, field, None)
     await session.commit()
     return WatchOut.model_validate(w)
 

@@ -1,7 +1,11 @@
-from datetime import timezone
+from datetime import datetime, timezone
 from sqlalchemy import DateTime
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import DeclarativeBase
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class UTCDateTime(TypeDecorator):

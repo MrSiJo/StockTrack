@@ -6,6 +6,7 @@ import { HealthIndicator } from '../components/HealthIndicator'
 import { EventFeed } from '../components/EventFeed'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { ErrorMessage } from '../components/ErrorMessage'
+import { muteProduct, unmuteProduct } from '../api/endpoints'
 import type { WatchStatus, Product, CheckResult } from '../api/types'
 
 function formatPrice(price: number | null): string {
@@ -63,17 +64,127 @@ function SubHeader({ label, count, colSpan }: {
   )
 }
 
+function isMuted(p: Product): boolean {
+  return p.muted_until != null && new Date(p.muted_until) > new Date()
+}
+
+function isAtLowestPrice(p: Product): boolean {
+  return (
+    p.current_price != null &&
+    p.lowest_price != null &&
+    p.current_price <= p.lowest_price
+  )
+}
+
+const MUTE_CHOICES = [
+  { label: 'Mute 1h', hours: 1 },
+  { label: 'Mute 24h', hours: 24 },
+  { label: 'Mute 7d', hours: 168 },
+]
+
+function MuteMenu({
+  product,
+  onChanged,
+}: {
+  product: Product
+  onChanged: () => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [muteError, setMuteError] = useState<string | null>(null)
+  const muted = isMuted(product)
+
+  const apply = async (hours: number | null) => {
+    setBusy(true)
+    setMuteError(null)
+    try {
+      if (hours == null) await unmuteProduct(product.id)
+      else await muteProduct(product.id, hours)
+      setOpen(false)
+      await onChanged()
+    } catch (e) {
+      setMuteError(String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <span className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title={
+          muted
+            ? `Muted until ${new Date(product.muted_until!).toLocaleString()}`
+            : 'Mute alerts for this product'
+        }
+        className={`rounded border px-1.5 py-1 text-xs ${
+          muted
+            ? 'border-amber-300 bg-amber-50 text-amber-700'
+            : 'border-gray-200 text-gray-400 hover:text-gray-700'
+        }`}
+      >
+        🔕
+      </button>
+      {open && (
+        <span className="absolute right-0 z-10 mt-1 flex w-28 flex-col rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+          {MUTE_CHOICES.map((c) => (
+            <button
+              key={c.hours}
+              type="button"
+              disabled={busy}
+              onClick={() => apply(c.hours)}
+              className="px-3 py-1 text-left text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {c.label}
+            </button>
+          ))}
+          {muted && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => apply(null)}
+              className="border-t border-gray-100 px-3 py-1 text-left text-xs text-amber-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Unmute
+            </button>
+          )}
+          {muteError && (
+            <span className="px-3 py-1 text-xs text-red-600">{muteError}</span>
+          )}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function ProductRow({
   product,
   showLeadTime,
+  onChanged,
 }: {
   product: Product
   showLeadTime: boolean
+  onChanged: () => Promise<void>
 }) {
   return (
     <tr className="hover:bg-gray-50">
       <td className="py-3 pl-4 pr-3 text-sm font-medium text-gray-900">
         {product.title}
+        {isAtLowestPrice(product) && (
+          <span className="ml-1.5" title="Lowest price seen">
+            🏆
+          </span>
+        )}
+        {isMuted(product) && (
+          <span
+            className="ml-1.5 opacity-60"
+            title={`Muted until ${new Date(product.muted_until!).toLocaleString()}`}
+          >
+            🔕
+          </span>
+        )}
       </td>
       <td className="py-3 px-3">
         <PhaseBadge availability={product.availability} />
@@ -90,11 +201,14 @@ function ProductRow({
         {formatRelative(product.last_checked)}
       </td>
       <td className="py-3 pl-3 pr-4">
-        <BasketButton
-          availability={product.availability}
-          basketUrl={product.basket_url}
-          productUrl={product.url}
-        />
+        <span className="flex items-center gap-1.5">
+          <BasketButton
+            availability={product.availability}
+            basketUrl={product.basket_url}
+            productUrl={product.url}
+          />
+          <MuteMenu product={product} onChanged={onChanged} />
+        </span>
       </td>
     </tr>
   )
@@ -103,9 +217,11 @@ function ProductRow({
 function WatchGroup({
   watch,
   onCheckNow,
+  onChanged,
 }: {
   watch: WatchStatus
   onCheckNow: (id: number) => Promise<CheckResult>
+  onChanged: () => Promise<void>
 }) {
   const label = watch.label || watch.store
   const [checkNote, setCheckNote] = useState<string | null>(null)
@@ -202,6 +318,7 @@ function WatchGroup({
                         key={p.id}
                         product={p}
                         showLeadTime={showLeadTime}
+                        onChanged={onChanged}
                       />
                     ))}
                   </>
@@ -218,6 +335,7 @@ function WatchGroup({
                         key={p.id}
                         product={p}
                         showLeadTime={showLeadTime}
+                        onChanged={onChanged}
                       />
                     ))}
                   </>
@@ -247,12 +365,31 @@ export function Dashboard() {
     return result
   }
 
+  const [query, setQuery] = useState('')
+  const [inStockOnly, setInStockOnly] = useState(false)
+
   // Disabled watches are hidden from the dashboard until re-enabled.
   const visibleWatches = watches.filter((w) => w.enabled)
 
   const hasEarlyAccess = visibleWatches.some((w) =>
     w.products.some((p) => p.availability === 'early'),
   )
+
+  // Client-side filtering: search on brand/title/code + in-stock-only toggle.
+  // Groups with no matching products are hidden while a filter is active.
+  const q = query.trim().toLowerCase()
+  const filterActive = q !== '' || inStockOnly
+  const filteredWatches = visibleWatches
+    .map((w) => ({
+      ...w,
+      products: w.products.filter(
+        (p) =>
+          (!q ||
+            `${p.brand} ${p.title} ${p.code}`.toLowerCase().includes(q)) &&
+          (!inStockOnly || isInStock(p)),
+      ),
+    }))
+    .filter((w) => !filterActive || w.products.length > 0)
 
   if (loading && watches.length === 0) return <LoadingSpinner />
   // Full-page error only when there's no data to show; once loaded, a failed
@@ -283,6 +420,27 @@ export function Dashboard() {
         </div>
       )}
 
+      {visibleWatches.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search products…"
+            className="w-64 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={inStockOnly}
+              onChange={(e) => setInStockOnly(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            In stock only
+          </label>
+        </div>
+      )}
+
       {watches.length === 0 ? (
         <div className="py-12 text-center text-gray-500">
           <p className="text-base">No watches configured.</p>
@@ -307,9 +465,18 @@ export function Dashboard() {
             page to see it here.
           </p>
         </div>
+      ) : filteredWatches.length === 0 ? (
+        <div className="py-12 text-center text-gray-500">
+          <p className="text-base">No products match the current filter.</p>
+        </div>
       ) : (
-        visibleWatches.map((w) => (
-          <WatchGroup key={w.id} watch={w} onCheckNow={handleCheckNow} />
+        filteredWatches.map((w) => (
+          <WatchGroup
+            key={w.id}
+            watch={w}
+            onCheckNow={handleCheckNow}
+            onChanged={fetchAll}
+          />
         ))
       )}
 
