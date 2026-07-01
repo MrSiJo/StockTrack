@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
@@ -21,11 +22,18 @@ async def poll_tick(sessionmaker, secret_key: str) -> None:
     async with sessionmaker() as s:
         watches = (await s.execute(
             select(Watch).where(Watch.enabled.is_(True)))).scalars().all()
+    tick_now = datetime.now(timezone.utc)
     for w in watches:
         async with sessionmaker() as s:
             watch = await s.get(Watch, w.id)
             if watch is None:  # deleted via the API since this tick's snapshot
                 continue
+            # Honor the per-watch cadence: the global tick is the resolution,
+            # a watch checked more recently than its own interval waits.
+            if watch.last_checked_at is not None:
+                age = (tick_now - watch.last_checked_at).total_seconds()
+                if age < watch.interval_seconds:
+                    continue
             prev_failures = watch.consecutive_failures
             try:
                 res = await check_watch(s, watch, secret_key=secret_key)
@@ -47,7 +55,6 @@ async def poll_tick(sessionmaker, secret_key: str) -> None:
                     log.warning("[%s] check failed but watch was deleted mid-tick: %r",
                                 w.store, e)
                     continue
-                from datetime import datetime, timezone
                 now = datetime.now(timezone.utc)
                 watch.consecutive_failures = prev_failures + 1
                 watch.last_checked_at = now
