@@ -449,6 +449,58 @@ async def test_failed_drop_send_keeps_price_ref(sessionmaker_):
 
 
 # ---------------------------------------------------------------------------
+# Per-product mute
+# ---------------------------------------------------------------------------
+
+async def test_muted_product_records_event_without_push(sessionmaker_):
+    from datetime import timedelta
+    t0 = datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc)
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", False, "", 100.0)], now=t0)
+        p = (await s.execute(select(Product))).scalar_one()
+        p.muted_until = t0 + timedelta(hours=24)
+        await s.commit()
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0)],
+                               now=t0 + timedelta(hours=1))
+        assert sent == []                       # no push while muted
+        assert res["public"] == 1               # ...but state/history advance
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert kinds == ["public"]
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.current_in_stock is True
+
+
+async def test_mute_expired_sends_again(sessionmaker_):
+    from datetime import timedelta
+    t0 = datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc)
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", False, "", 100.0)], now=t0)
+        p = (await s.execute(select(Product))).scalar_one()
+        p.muted_until = t0 + timedelta(hours=1)
+        await s.commit()
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0)],
+                               now=t0 + timedelta(hours=2))
+        assert len(sent) == 1                   # mute expired -> push resumes
+        assert res["public"] == 1
+
+
+# ---------------------------------------------------------------------------
 # new_product priority
 # ---------------------------------------------------------------------------
 

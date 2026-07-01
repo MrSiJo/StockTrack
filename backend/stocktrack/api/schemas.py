@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ── Watch ──────────────────────────────────────────────────────────────────
@@ -77,8 +77,19 @@ class ProductOut(BaseModel):
     current_in_stock: bool
     current_price: Optional[float]
     lowest_price: Optional[float]
+    muted_until: Optional[datetime]
     available_since: Optional[datetime]
     last_checked: Optional[datetime]
+
+
+class MuteIn(BaseModel):
+    hours: int = Field(ge=1, le=24 * 30)
+
+
+class PricePointOut(BaseModel):
+    ts: datetime
+    kind: str
+    price: float
 
 
 class WatchStatusOut(BaseModel):
