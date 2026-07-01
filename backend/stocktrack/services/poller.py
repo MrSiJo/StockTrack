@@ -249,6 +249,9 @@ async def check_watch(session, watch, *, secret_key, handler=None,
 
     cfg = await gotify_config(session, secret_key)
     restock_priority = int(await get_setting(session, "restock_priority", "8") or 8)
+    new_product_priority = int(
+        await get_setting(session, "new_product_priority", str(restock_priority))
+        or restock_priority)
     oos_priority = int(await get_setting(session, "oos_priority", "4") or 4)
     drop_min_pct = float(await get_setting(session, "price_drop_min_pct", "5") or 5)
     drop_min_abs = float(await get_setting(session, "price_drop_min_abs", "5") or 5)
@@ -315,7 +318,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
                 row=row, kind="new_product",
                 title=f"🆕 {watch.store} · New product: {p.title or p.code}",
                 message=_new_product_msg(p),
-                click_url=p.url or None, priority=restock_priority,
+                click_url=p.url or None, priority=new_product_priority,
                 on_success=_np_ok, on_failure=_np_fail,
                 group_line=f"🆕 {p.title or p.code}: new product{price_sfx}",
             ))

@@ -449,6 +449,28 @@ async def test_failed_drop_send_keeps_price_ref(sessionmaker_):
 
 
 # ---------------------------------------------------------------------------
+# new_product priority
+# ---------------------------------------------------------------------------
+
+async def test_new_product_uses_own_priority(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "new_product_priority", 2)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel A", True, "", 100.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel A", True, "", 100.0),
+                                      P("B", "Panel B", True, "", 150.0)])
+        assert res["new_products"] == 1
+        assert sent[0]["priority"] == 2
+
+
+# ---------------------------------------------------------------------------
 # OOS gate for price alerts
 # ---------------------------------------------------------------------------
 

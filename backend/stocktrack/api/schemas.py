@@ -153,6 +153,7 @@ class SettingsOut(BaseModel):
     gotify_token_set: bool
     gotify_priority: int
     restock_priority: int
+    new_product_priority: int
     oos_priority: int
     gotify_send_retries: int
     default_interval_seconds: int
@@ -175,6 +176,7 @@ class SettingsUpdate(BaseModel):
     gotify_token: Optional[str] = None   # write-only; never returned
     gotify_priority: Optional[int] = None
     restock_priority: Optional[int] = None
+    new_product_priority: Optional[int] = None
     oos_priority: Optional[int] = None
     gotify_send_retries: Optional[int] = None
     default_interval_seconds: Optional[int] = None

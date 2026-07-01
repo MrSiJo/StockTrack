@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     gotify_token: str = ""
     gotify_priority: int = 7
     restock_priority: int = 8
+    new_product_priority: int = 8
     oos_priority: int = 4
     gotify_send_retries: int = 3
     failure_alert_after: int = 6

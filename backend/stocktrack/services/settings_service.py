@@ -82,6 +82,7 @@ async def seed_from_env(session, env, secret_key: str) -> None:
         "gotify_token": (env.gotify_token, True),
         "gotify_priority": (str(env.gotify_priority), False),
         "restock_priority": (str(env.restock_priority), False),
+        "new_product_priority": (str(env.new_product_priority), False),
         "oos_priority": (str(env.oos_priority), False),
         "gotify_send_retries": (str(env.gotify_send_retries), False),
         "default_interval_seconds": (str(env.default_interval_seconds), False),

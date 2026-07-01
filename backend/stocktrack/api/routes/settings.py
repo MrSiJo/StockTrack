@@ -21,6 +21,7 @@ _PLAIN_SETTING_KEYS = [
     "gotify_url",
     "gotify_priority",
     "restock_priority",
+    "new_product_priority",
     "oos_priority",
     "gotify_send_retries",
     "default_interval_seconds",
@@ -45,6 +46,7 @@ async def _read_settings(session: AsyncSession, secret_key: str) -> SettingsOut:
         gotify_token_set=bool(token),
         gotify_priority=int(await get(session, "gotify_priority", "7") or 7),
         restock_priority=int(await get(session, "restock_priority", "8") or 8),
+        new_product_priority=int(await get(session, "new_product_priority", "8") or 8),
         oos_priority=int(await get(session, "oos_priority", "4") or 4),
         gotify_send_retries=int(await get(session, "gotify_send_retries", "3") or 3),
         default_interval_seconds=int(
