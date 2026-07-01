@@ -449,6 +449,58 @@ async def test_failed_drop_send_keeps_price_ref(sessionmaker_):
 
 
 # ---------------------------------------------------------------------------
+# Price-rise (up-recovery) alerts
+# ---------------------------------------------------------------------------
+
+def test_is_price_rise_thresholds():
+    f = poller.is_price_rise
+    assert f(493.0, 519.0, 5, 5) is True          # +26 (+5.3%)
+    assert f(519.0, 521.0, 5, 5) is False         # +2, +0.4%
+    assert f(20.0, 21.0, 5, 5) is False           # 5% but only £1
+    assert f(519.0, 493.0, 5, 5) is False         # fell
+    assert f(500.0, 500.0, 5, 5) is False
+    assert f(None, 500.0, 5, 5) is False
+    assert f(500.0, None, 5, 5) is False
+
+
+async def test_price_rise_alert_when_enabled(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_rises=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "price_drop_min_pct", 5)
+        await _set(s, "price_drop_min_abs", 5)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 493.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 519.0)])
+        assert res["price_rises"] == 1
+        assert any("Price back up" in x["title"] for x in sent)
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert "price_rise" in kinds
+
+
+async def test_price_rise_disabled_by_default(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 493.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 519.0)])
+        assert res.get("price_rises", 0) == 0
+        assert sent == []
+
+
+# ---------------------------------------------------------------------------
 # New-low (all-time-low) alerts
 # ---------------------------------------------------------------------------
 

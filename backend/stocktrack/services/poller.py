@@ -96,6 +96,27 @@ def is_price_drop(old, new, min_pct, min_abs) -> bool:
     return drop >= min_abs and pct >= min_pct
 
 
+def is_price_rise(old, new, min_pct, min_abs) -> bool:
+    """True when ``new`` is a meaningful rise above ``old`` (both thresholds met)."""
+    if old is None or new is None or new <= old:
+        return False
+    rise = new - old
+    pct = (rise / old) * 100 if old else 0
+    return rise >= min_abs and pct >= min_pct
+
+
+def _price_rise_msg(p, old, new) -> str:
+    rise = new - old
+    pct = (rise / old) * 100 if old else 0
+    parts = [f"**{fmt_price(old)} → {fmt_price(new)}** "
+             f"(+{fmt_price(rise)}, +{pct:.0f}%)"]
+    if getattr(p, "delivery", ""):
+        parts.append(f"Delivery: {p.delivery}")
+    if p.url:
+        parts.append(f"[Open product page ↗]({p.url})")
+    return md_lines(parts)
+
+
 def _lead_time_msg(p, old, new):
     parts = [f"**{old or '—'} → {new or '—'}**"]
     if p.url:
@@ -240,7 +261,7 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     lead_time_priority = int(await get_setting(session, "lead_time_priority", "5") or 5)
     counts = {"early": 0, "public": 0, "oos": 0, "price_drops": 0,
               "new_products": 0, "lead_time_changes": 0, "price_targets": 0,
-              "new_lows": 0}
+              "new_lows": 0, "price_rises": 0}
     pending: list[PendingAlert] = []
 
     for p in parsed:
@@ -401,6 +422,26 @@ async def check_watch(session, watch, *, secret_key, handler=None,
                 on_success=_pd_ok, on_failure=_pd_fail,
                 group_line=f"💸 {p.title or p.code}: "
                            f"{fmt_price(ref_price)} → {fmt_price(p.price)}",
+            ))
+
+        if (watch.track_price_rises
+                and is_price_rise(old_price, p.price, drop_min_pct, drop_min_abs)):
+
+            def _pr_ok(row=row, p=p):
+                session.add(Event(product_id=row.id, kind="price_rise", price=p.price))
+                counts["price_rises"] += 1
+
+            def _pr_fail(row=row, old_price=old_price):
+                row.current_price = old_price  # delivery-safe: revert, retry next tick
+
+            pending.append(PendingAlert(
+                row=row, kind="price_rise",
+                title=f"📈 {watch.store} · Price back up: {p.title or p.code}",
+                message=_price_rise_msg(p, old_price, p.price),
+                click_url=p.url or None, priority=drop_priority,
+                on_success=_pr_ok, on_failure=_pr_fail,
+                group_line=f"📈 {p.title or p.code}: "
+                           f"{fmt_price(old_price)} → {fmt_price(p.price)}",
             ))
 
         # All-time-low tracking. Backfill/silent when drop alerts are off;
