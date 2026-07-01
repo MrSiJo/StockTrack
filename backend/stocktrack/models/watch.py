@@ -15,6 +15,11 @@ class Watch(Base):
     enabled: Mapped[bool] = mapped_column(default=True)
     kind: Mapped[str] = mapped_column(default="listing")
     track_price_drops: Mapped[bool] = mapped_column(default=False)
+    # Optional per-watch overrides of the global price_drop_min_* settings,
+    # and an absolute "alert when price reaches X" target.
+    price_drop_min_pct: Mapped[Optional[float]] = mapped_column(default=None)
+    price_drop_min_abs: Mapped[Optional[float]] = mapped_column(default=None)
+    price_target: Mapped[Optional[float]] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     last_checked_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     last_ok_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)

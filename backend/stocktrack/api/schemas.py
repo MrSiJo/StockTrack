@@ -18,6 +18,9 @@ class WatchOut(BaseModel):
     enabled: bool
     kind: str
     track_price_drops: bool
+    price_drop_min_pct: Optional[float]
+    price_drop_min_abs: Optional[float]
+    price_target: Optional[float]
     created_at: datetime
     last_checked_at: Optional[datetime]
     last_ok_at: Optional[datetime]
@@ -35,6 +38,9 @@ class WatchCreate(BaseModel):
     enabled: bool = True
     kind: str = "listing"
     track_price_drops: bool = False
+    price_drop_min_pct: Optional[float] = None
+    price_drop_min_abs: Optional[float] = None
+    price_target: Optional[float] = None
 
 
 class WatchUpdate(BaseModel):
@@ -47,6 +53,9 @@ class WatchUpdate(BaseModel):
     enabled: Optional[bool] = None
     kind: Optional[str] = None
     track_price_drops: Optional[bool] = None
+    price_drop_min_pct: Optional[float] = None
+    price_drop_min_abs: Optional[float] = None
+    price_target: Optional[float] = None
 
 
 # ── Status ─────────────────────────────────────────────────────────────────

@@ -386,6 +386,100 @@ async def test_lead_time_change_alert(sessionmaker_):
 
 
 # ---------------------------------------------------------------------------
+# Per-watch thresholds + target price
+# ---------------------------------------------------------------------------
+
+async def test_per_watch_thresholds_override_globals(sessionmaker_):
+    async with sessionmaker_() as s:
+        wa = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                   track_price_drops=True,
+                   price_drop_min_pct=20, price_drop_min_abs=50)
+        wb = Watch(store="fake", url="u2", include_filter="", exclude_filter="",
+                   track_price_drops=True,
+                   price_drop_min_pct=0.1, price_drop_min_abs=0.5)
+        s.add_all([wa, wb])
+        await s.commit()
+        wa_id, wb_id = wa.id, wb.id
+        await _set(s, "price_drop_min_pct", 5)
+        await _set(s, "price_drop_min_abs", 5)
+    # watch A: -5% drop meets globals but not its tighter per-watch rule
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wa_id)
+        await _run(s, w, [P("A", "Panel", True, "", 519.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wa_id)
+        res, _ = await _run(s, w, [P("A", "Panel", True, "", 493.0)])
+        assert res["price_drops"] == 0
+    # watch B: -£2 fails globals but passes its looser per-watch rule
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wb_id)
+        await _run(s, w, [P("B", "Panel B", True, "", 519.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wb_id)
+        res, _ = await _run(s, w, [P("B", "Panel B", True, "", 517.0)])
+        assert res["price_drops"] == 1
+
+
+async def test_price_target_fires_on_crossing(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  track_price_drops=False, price_target=100.0)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 110.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 95.0)])
+        assert res["price_targets"] == 1
+        assert any("Target price" in x["title"] for x in sent)
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert "price_target" in kinds
+
+
+async def test_price_target_no_refire_below(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  price_target=100.0)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 110.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 95.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 93.0)])
+        assert res["price_targets"] == 0
+        assert sent == []
+
+
+async def test_price_target_send_failure_reverts_price(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="",
+                  price_target=100.0)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 110.0)])
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, _ = await _run(s, w, [P("A", "Panel", True, "", 95.0)], sends_ok=False)
+        assert res["price_targets"] == 0
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.current_price == 110.0   # reverted (delivery-safe) -> refires next tick
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert "price_target" not in kinds
+
+
+# ---------------------------------------------------------------------------
 # Alert grouping
 # ---------------------------------------------------------------------------
 

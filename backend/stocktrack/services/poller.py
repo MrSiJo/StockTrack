@@ -103,6 +103,15 @@ def _lead_time_msg(p, old, new):
     return md_lines(parts)
 
 
+def _price_target_msg(p, target) -> str:
+    parts = [f"**{fmt_price(p.price)}** — at or below your target of {fmt_price(target)}"]
+    if getattr(p, "delivery", ""):
+        parts.append(f"Delivery: {p.delivery}")
+    if p.url:
+        parts.append(f"[Open product page ↗]({p.url})")
+    return md_lines(parts)
+
+
 def _price_drop_msg(p, old, new) -> str:
     drop = old - new
     pct = (drop / old) * 100 if old else 0
@@ -213,10 +222,15 @@ async def check_watch(session, watch, *, secret_key, handler=None,
     oos_priority = int(await get_setting(session, "oos_priority", "4") or 4)
     drop_min_pct = float(await get_setting(session, "price_drop_min_pct", "5") or 5)
     drop_min_abs = float(await get_setting(session, "price_drop_min_abs", "5") or 5)
+    # Per-watch overrides beat the global settings
+    if watch.price_drop_min_pct is not None:
+        drop_min_pct = watch.price_drop_min_pct
+    if watch.price_drop_min_abs is not None:
+        drop_min_abs = watch.price_drop_min_abs
     drop_priority = int(await get_setting(session, "price_drop_priority", "6") or 6)
     lead_time_priority = int(await get_setting(session, "lead_time_priority", "5") or 5)
     counts = {"early": 0, "public": 0, "oos": 0, "price_drops": 0,
-              "new_products": 0, "lead_time_changes": 0}
+              "new_products": 0, "lead_time_changes": 0, "price_targets": 0}
     pending: list[PendingAlert] = []
 
     for p in parsed:
@@ -365,6 +379,27 @@ async def check_watch(session, watch, *, secret_key, handler=None,
                 on_success=_pd_ok, on_failure=_pd_fail,
                 group_line=f"💸 {p.title or p.code}: "
                            f"{fmt_price(old_price)} → {fmt_price(p.price)}",
+            ))
+
+        if (watch.price_target is not None and p.price is not None
+                and p.price <= watch.price_target
+                and (old_price is None or old_price > watch.price_target)):
+
+            def _pt_ok(row=row, p=p):
+                session.add(Event(product_id=row.id, kind="price_target", price=p.price))
+                counts["price_targets"] += 1
+
+            def _pt_fail(row=row, old_price=old_price):
+                row.current_price = old_price  # delivery-safe: revert, retry next tick
+
+            pending.append(PendingAlert(
+                row=row, kind="price_target",
+                title=f"🎯 {watch.store} · Target price hit: {p.title or p.code}",
+                message=_price_target_msg(p, watch.price_target),
+                click_url=p.url or None, priority=drop_priority,
+                on_success=_pt_ok, on_failure=_pt_fail,
+                group_line=f"🎯 {p.title or p.code}: {fmt_price(p.price)} "
+                           f"≤ target {fmt_price(watch.price_target)}",
             ))
 
         if (prev != "oos" and curr != "oos"
