@@ -94,6 +94,7 @@ async def seed_from_env(session, env, secret_key: str) -> None:
         "price_drop_min_abs": (str(env.price_drop_min_abs), False),
         "price_drop_priority": (str(env.price_drop_priority), False),
         "lead_time_priority": (str(env.lead_time_priority), False),
+        "lead_time_min_change_days": (str(env.lead_time_min_change_days), False),
         "alert_group_threshold": (str(env.alert_group_threshold), False),
         "price_drop_in_stock_only": (str(env.price_drop_in_stock_only).lower(), False),
         "digest_cadence": (env.digest_cadence, False),

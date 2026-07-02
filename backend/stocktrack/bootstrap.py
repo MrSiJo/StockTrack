@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     price_drop_min_abs: float = 5
     price_drop_priority: int = 6
     lead_time_priority: int = 5
+    lead_time_min_change_days: int = 7
     alert_group_threshold: int = 3
     price_drop_in_stock_only: bool = True
     digest_cadence: str = "off"
