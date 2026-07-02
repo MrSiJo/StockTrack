@@ -170,6 +170,7 @@ export interface Settings {
   price_drop_min_abs: number
   price_drop_priority: number
   lead_time_priority: number
+  lead_time_min_change_days: number
   new_product_priority: number
   alert_group_threshold: number
   price_drop_in_stock_only: boolean
@@ -206,6 +207,7 @@ export interface SettingsUpdate {
   price_drop_min_abs?: number
   price_drop_priority?: number
   lead_time_priority?: number
+  lead_time_min_change_days?: number
   new_product_priority?: number
   alert_group_threshold?: number
   price_drop_in_stock_only?: boolean

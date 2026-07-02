@@ -18,6 +18,7 @@ interface GotifyForm {
   price_drop_min_abs: number
   price_drop_priority: number
   lead_time_priority: number
+  lead_time_min_change_days: number
   new_product_priority: number
   alert_group_threshold: number
   price_drop_in_stock_only: boolean
@@ -41,6 +42,7 @@ const EMPTY_FORM: GotifyForm = {
   price_drop_min_abs: 5,
   price_drop_priority: 6,
   lead_time_priority: 5,
+  lead_time_min_change_days: 7,
   new_product_priority: 8,
   alert_group_threshold: 3,
   price_drop_in_stock_only: true,
@@ -80,6 +82,7 @@ export function GotifyPage() {
         price_drop_min_abs: settings.price_drop_min_abs,
         price_drop_priority: settings.price_drop_priority,
         lead_time_priority: settings.lead_time_priority,
+        lead_time_min_change_days: settings.lead_time_min_change_days,
         new_product_priority: settings.new_product_priority,
         alert_group_threshold: settings.alert_group_threshold,
         price_drop_in_stock_only: settings.price_drop_in_stock_only,
@@ -116,6 +119,7 @@ export function GotifyPage() {
         price_drop_min_abs: form.price_drop_min_abs,
         price_drop_priority: form.price_drop_priority,
         lead_time_priority: form.lead_time_priority,
+        lead_time_min_change_days: form.lead_time_min_change_days,
         new_product_priority: form.new_product_priority,
         alert_group_threshold: form.alert_group_threshold,
         price_drop_in_stock_only: form.price_drop_in_stock_only,
@@ -348,7 +352,26 @@ export function GotifyPage() {
                 min={1}
               />
             </div>
+            <div>
+              <label className={labelClass}>
+                Lead-time alert min swing (days, 0 = any change)
+              </label>
+              <input
+                type="number"
+                value={form.lead_time_min_change_days}
+                onChange={(e) =>
+                  set('lead_time_min_change_days', Number(e.target.value))
+                }
+                className={inputClass}
+                min={0}
+              />
+            </div>
           </div>
+          <p className="text-xs text-gray-500">
+            Delivery dates that naturally slide day-to-day (e.g. rolling
+            next-day estimates) won't alert unless the date swings by at least
+            this many days. Delivery ↔ collection switches always alert.
+          </p>
         </div>
 
         <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">

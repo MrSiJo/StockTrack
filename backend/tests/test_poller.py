@@ -375,10 +375,11 @@ async def test_lead_time_change_alert(sessionmaker_):
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
         await _run(s, w, [P("A", "Panel", True, "", 100.0, delivery="Delivery by Mon 30 Jun (carrier)")])
-    # 2nd poll: still in stock, delivery changed -> lead_time alert
+    # 2nd poll: still in stock, delivery swings well past the slide threshold
+    # -> lead_time alert
     async with sessionmaker_() as s:
         w = await s.get(Watch, wid)
-        res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0, delivery="Delivery by Thu 2 Jul (branch)")])
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0, delivery="Delivery by Thu 30 Jul (branch)")])
         assert res["lead_time_changes"] == 1
         assert any("Delivery changed" in x["title"] for x in sent)
         kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
@@ -907,6 +908,96 @@ async def test_grouped_send_failure_reverts_all(sessionmaker_):
         assert (await s.execute(select(Event))).scalars().all() == []
         rows = (await s.execute(select(Product))).scalars().all()
         assert all(not r.current_in_stock for r in rows)
+
+
+# ---------------------------------------------------------------------------
+# Lead-time slide suppression
+# ---------------------------------------------------------------------------
+
+NOW_JUL2 = datetime(2026, 7, 2, 9, 0, 0, tzinfo=timezone.utc)
+
+
+def test_is_lead_time_change_significant():
+    f = poller.is_lead_time_change_significant
+    # daily slide (next-day delivery rolling forward): suppressed
+    assert f("Delivery by Thu 2 Jul", "Delivery by Fri 3 Jul", NOW_JUL2, 7) is False
+    # big swing out to ~4 weeks: alerts
+    assert f("Delivery by Fri 3 Jul", "Delivery by Thu 30 Jul", NOW_JUL2, 7) is True
+    # big swing back in (deal on lead time): alerts
+    assert f("Delivery by Thu 30 Jul", "Delivery by Fri 3 Jul", NOW_JUL2, 7) is True
+    # exactly at the threshold: alerts
+    assert f("Delivery by Fri 3 Jul", "Delivery by Fri 10 Jul", NOW_JUL2, 7) is True
+    # channel switch is always significant even with close dates
+    assert f("Delivery by Fri 3 Jul", "Collection by Sat 4 Jul", NOW_JUL2, 7) is True
+    # unparseable text falls back to alerting on any change
+    assert f("2-3 working days", "5-7 working days", NOW_JUL2, 7) is True
+    # min_days=0 restores alert-on-any-change
+    assert f("Delivery by Thu 2 Jul", "Delivery by Fri 3 Jul", NOW_JUL2, 0) is True
+    # year rollover: 30 Dec -> 2 Jan is a 3-day slide, suppressed
+    dec_now = datetime(2026, 12, 29, 9, 0, 0, tzinfo=timezone.utc)
+    assert f("Delivery by Wed 30 Dec", "Delivery by Sat 2 Jan", dec_now, 7) is False
+    # ordinal + full month (AO style) parses too
+    assert f("Home delivery from 3rd July", "Home delivery from 4th July",
+             NOW_JUL2, 7) is False
+
+
+async def test_sliding_delivery_date_does_not_alert(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 100.0,
+                            delivery="Delivery by Thu 2 Jul")], now=NOW_JUL2)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0,
+                                        delivery="Delivery by Fri 3 Jul")],
+                               now=NOW_JUL2)
+        assert res["lead_time_changes"] == 0
+        assert sent == []
+        p = (await s.execute(select(Product))).scalar_one()
+        assert p.delivery == "Delivery by Fri 3 Jul"   # state still tracks
+
+
+async def test_big_delivery_swing_still_alerts(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 100.0,
+                            delivery="Delivery by Fri 3 Jul")], now=NOW_JUL2)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [P("A", "Panel", True, "", 100.0,
+                                        delivery="Delivery by Thu 30 Jul")],
+                               now=NOW_JUL2)
+        assert res["lead_time_changes"] == 1
+        assert any("Delivery changed" in x["title"] for x in sent)
+
+
+async def test_slide_alerts_again_when_threshold_zero(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "lead_time_min_change_days", 0)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", True, "", 100.0,
+                            delivery="Delivery by Thu 2 Jul")], now=NOW_JUL2)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, _ = await _run(s, w, [P("A", "Panel", True, "", 100.0,
+                                     delivery="Delivery by Fri 3 Jul")],
+                            now=NOW_JUL2)
+        assert res["lead_time_changes"] == 1
 
 
 async def test_oos_to_instock_does_not_fire_lead_time(sessionmaker_):

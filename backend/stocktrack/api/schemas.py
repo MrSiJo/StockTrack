@@ -176,6 +176,7 @@ class SettingsOut(BaseModel):
     price_drop_min_abs: float
     price_drop_priority: int
     lead_time_priority: int
+    lead_time_min_change_days: int
     alert_group_threshold: int
     price_drop_in_stock_only: bool
     digest_cadence: str
@@ -202,6 +203,7 @@ class SettingsUpdate(BaseModel):
     price_drop_min_abs: Optional[float] = None
     price_drop_priority: Optional[int] = None
     lead_time_priority: Optional[int] = None
+    lead_time_min_change_days: Optional[int] = None
     alert_group_threshold: Optional[int] = None
     price_drop_in_stock_only: Optional[bool] = None
     digest_cadence: Optional[str] = None

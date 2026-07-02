@@ -32,6 +32,7 @@ _PLAIN_SETTING_KEYS = [
     "price_drop_min_abs",
     "price_drop_priority",
     "lead_time_priority",
+    "lead_time_min_change_days",
     "alert_group_threshold",
     "digest_cadence",
     "digest_hour",
@@ -65,6 +66,8 @@ async def _read_settings(session: AsyncSession, secret_key: str) -> SettingsOut:
         price_drop_min_abs=float(await get(session, "price_drop_min_abs", "5") or 5),
         price_drop_priority=int(await get(session, "price_drop_priority", "6") or 6),
         lead_time_priority=int(await get(session, "lead_time_priority", "5") or 5),
+        lead_time_min_change_days=int(
+            await get(session, "lead_time_min_change_days", "7") or 7),
         alert_group_threshold=int(await get(session, "alert_group_threshold", "3") or 3),
         price_drop_in_stock_only=truthy(
             await get(session, "price_drop_in_stock_only", "true")
