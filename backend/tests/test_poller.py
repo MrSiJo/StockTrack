@@ -19,7 +19,8 @@ def _handler_returning(products):
 async def _run(session, watch, products, *, sends_ok=True, now=None):
     sent = []
     def sender(cfg, title, message, click_url=None, markdown=False, priority=None, sleep=None):
-        sent.append({"title": title, "priority": priority, "click_url": click_url})
+        sent.append({"title": title, "message": message,
+                     "priority": priority, "click_url": click_url})
         return sends_ok
     async def fetcher(handler, url):
         return "raw"
@@ -908,6 +909,38 @@ async def test_grouped_send_failure_reverts_all(sessionmaker_):
         assert (await s.execute(select(Event))).scalars().all() == []
         rows = (await s.execute(select(Product))).scalars().all()
         assert all(not r.current_in_stock for r in rows)
+
+
+async def test_grouped_push_has_markdown_link_per_product(sessionmaker_):
+    """A grouped push renders each product as a tappable markdown link, and its
+    notification-level click points at the configured dashboard URL."""
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "dashboard_url", "http://stocktrack.local")
+        await _set(s, "alert_group_threshold", 2)
+    # baseline OOS
+    prods_oos = [P(f"c{i}", f"Item {i}", False, "", url=f"http://shop.local/c{i}")
+                 for i in range(3)]
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, prods_oos)
+    # all come into stock at once
+    prods_in = [P(f"c{i}", f"Item {i}", True, "", 10.0 + i, url=f"http://shop.local/c{i}")
+                for i in range(3)]
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, prods_in)
+        assert res["public"] == 3
+        grouped = [p for p in sent if "updates" in p["title"].lower()]
+        assert grouped, "expected one grouped push"
+        body = grouped[0]["message"]
+        for i in range(3):
+            assert "](http" in body           # markdown links present
+            assert f"Item {i}" in body
+        assert grouped[0]["click_url"] == "http://stocktrack.local"
 
 
 # ---------------------------------------------------------------------------

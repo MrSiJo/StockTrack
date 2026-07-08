@@ -223,12 +223,25 @@ class PendingAlert:
     group_line: str
 
 
-async def _dispatch(pending, cfg, sender, threshold, store, now) -> None:
+def _group_link(a: "PendingAlert") -> str:
+    """One grouped-push body line: a tappable markdown link per product so each
+    product in a batched notification is individually reachable (the
+    notification-level click can only target one URL)."""
+    price = (f" — {fmt_price(a.row.current_price)}"
+             if a.row.current_price is not None else "")
+    label = f"{a.row.title or a.row.code}{price}"
+    return f"- [{label}]({a.click_url})" if a.click_url else f"- {label}"
+
+
+async def _dispatch(pending, cfg, sender, threshold, store, now,
+                    dashboard_url="") -> None:
     """Send staged alerts and run each one's success/failure closure.
 
     Muted products advance state silently (no push). When a tick stages
     ``threshold``-or-more sendable alerts (0 disables grouping) they collapse
-    into one grouped push whose delivery outcome applies to all of them.
+    into one grouped push whose delivery outcome applies to all of them. The
+    grouped body lists each product as a markdown link; the notification-level
+    click targets ``dashboard_url`` (falling back to the first product's URL).
     """
     sendable = []
     for a in pending:
@@ -241,11 +254,12 @@ async def _dispatch(pending, cfg, sender, threshold, store, now) -> None:
         return
     if threshold > 0 and len(sendable) >= threshold:
         title = f"📦 {store} · {len(sendable)} updates"
-        message = md_lines([a.group_line for a in sendable])
+        message = md_lines([_group_link(a) for a in sendable])
         priority = max(a.priority for a in sendable)
+        click = dashboard_url or sendable[0].click_url
         ok = await asyncio.to_thread(
             sender, cfg, title, message,
-            click_url=sendable[0].click_url, markdown=True, priority=priority,
+            click_url=click, markdown=True, priority=priority,
         )
         for a in sendable:
             (a.on_success if ok else a.on_failure)()
@@ -309,6 +323,7 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
     lead_time_min_days = int(
         await get_setting(session, "lead_time_min_change_days", "7") or 7)
     in_stock_only = truthy(await get_setting(session, "price_drop_in_stock_only", "true"))
+    dashboard_url = await get_setting(session, "dashboard_url", "") or ""
     counts = {"early": 0, "public": 0, "oos": 0, "price_drops": 0,
               "new_products": 0, "lead_time_changes": 0, "price_targets": 0,
               "new_lows": 0, "price_rises": 0}
@@ -635,7 +650,8 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
             ))
 
     threshold = int(await get_setting(session, "alert_group_threshold", "3") or 3)
-    await _dispatch(pending, cfg, sender, threshold, watch.store, now)
+    await _dispatch(pending, cfg, sender, threshold, watch.store, now,
+                    dashboard_url=dashboard_url)
 
     # Addendum A: update watch health on success
     watch.last_checked_at = now
