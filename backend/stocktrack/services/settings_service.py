@@ -1,7 +1,10 @@
 """DB-backed settings with encrypted secrets + env seed."""
+import logging
 from typing import Optional
 from stocktrack.crypto import decrypt, encrypt
 from stocktrack.models.setting import Setting
+
+log = logging.getLogger(__name__)
 
 
 def truthy(v) -> bool:
@@ -26,6 +29,10 @@ async def get_secret(session, key: str, secret_key: str, default: str = "") -> s
     try:
         return decrypt(row.value, secret_key)
     except Exception:
+        # An empty gotify_token reads as "unconfigured", so a decrypt failure
+        # would otherwise silently disable all alerts while state advances.
+        log.error("decrypt of setting %r failed — has APP_SECRET_KEY changed? "
+                  "Re-save the secret in the UI to restore notifications.", key)
         return default
 
 async def set_value(session, key: str, value: str, *, is_secret: bool = False,

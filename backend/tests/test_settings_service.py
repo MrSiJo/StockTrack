@@ -47,6 +47,21 @@ async def test_gotify_config(sessionmaker_):
         assert cfg["retries"] == 3
 
 
+async def test_get_secret_logs_on_decrypt_failure(sessionmaker_, caplog):
+    """A changed APP_SECRET_KEY must not silently disable alerts — the
+    decrypt failure is logged (and the default returned)."""
+    import logging
+    from stocktrack.services.settings_service import get_secret, set_value
+    async with sessionmaker_() as s:
+        await set_value(s, "gotify_token", "mytoken", is_secret=True, secret_key=KEY)
+        await s.commit()
+    async with sessionmaker_() as s:
+        with caplog.at_level(logging.ERROR, logger="stocktrack.services.settings_service"):
+            value = await get_secret(s, "gotify_token", "x" * 32, "")
+        assert value == ""
+        assert any("APP_SECRET_KEY" in r.message for r in caplog.records)
+
+
 async def test_truthy_helper():
     from stocktrack.services.settings_service import truthy
     assert truthy("true") and truthy("True") and truthy("1") and truthy("yes")
