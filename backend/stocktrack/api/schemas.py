@@ -184,6 +184,8 @@ class SettingsOut(BaseModel):
     digest_priority: int
     cp_delivery_postcode: str
     cp_collection_branch_id: str
+    product_archive_days: int
+    dashboard_url: str
 
 
 class SettingsUpdate(BaseModel):
@@ -211,6 +213,8 @@ class SettingsUpdate(BaseModel):
     digest_priority: Optional[int] = None
     cp_delivery_postcode: Optional[str] = None
     cp_collection_branch_id: Optional[str] = None
+    product_archive_days: Optional[int] = None
+    dashboard_url: Optional[str] = None
 
 
 # ── History ────────────────────────────────────────────────────────────────

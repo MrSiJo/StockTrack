@@ -95,6 +95,8 @@ async def seed_from_env(session, env, secret_key: str) -> None:
         "default_interval_seconds": (str(env.default_interval_seconds), False),
         "failure_alert_after": (str(env.failure_alert_after), False),
         "event_retention_days": (str(env.event_retention_days), False),
+        "product_archive_days": (str(env.product_archive_days), False),
+        "dashboard_url": (env.dashboard_url, False),
         "early_access_days": (str(env.early_access_days), False),
         "ao_member": (str(env.ao_member).lower(), False),
         "price_drop_min_pct": (str(env.price_drop_min_pct), False),

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     oos_priority: int = 4
     gotify_send_retries: int = 3
     failure_alert_after: int = 6
-    event_retention_days: int = 0
+    event_retention_days: int = 180
     default_interval_seconds: int = 300
     early_access_days: int = 30
     ao_member: bool = False
@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     cp_collection_branch_id: str = ""
     seed_ao_url: str = ""
     seed_jl_url: str = ""
+    product_archive_days: int = 14
+    dashboard_url: str = ""
 
     @field_validator("app_secret_key")
     @classmethod

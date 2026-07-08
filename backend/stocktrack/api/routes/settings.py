@@ -39,6 +39,8 @@ _PLAIN_SETTING_KEYS = [
     "digest_priority",
     "cp_delivery_postcode",
     "cp_collection_branch_id",
+    "product_archive_days",
+    "dashboard_url",
 ]
 
 
@@ -79,6 +81,8 @@ async def _read_settings(session: AsyncSession, secret_key: str) -> SettingsOut:
         digest_priority=int(await get(session, "digest_priority", "4") or 4),
         cp_delivery_postcode=await get(session, "cp_delivery_postcode", "") or "",
         cp_collection_branch_id=await get(session, "cp_collection_branch_id", "") or "",
+        product_archive_days=int(await get(session, "product_archive_days", "14") or 14),
+        dashboard_url=await get(session, "dashboard_url", "") or "",
     )
 
 
