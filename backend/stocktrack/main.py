@@ -18,6 +18,13 @@ from stocktrack.services.settings_service import get as get_setting, gotify_conf
 
 log = logging.getLogger("stocktrack")
 
+# Watch ids whose failure alert was actually delivered. Recovery pushes key
+# off this (one transient blip must not produce a recovery for a failure the
+# user was never told about), and the >= comparison below still alerts when
+# the threshold is lowered mid-streak. In-memory only: lost on restart,
+# which at worst re-sends one failure alert.
+_failure_alerted: set[int] = set()
+
 
 async def poll_tick(sessionmaker, secret_key: str) -> None:
     async with sessionmaker() as s:
@@ -40,15 +47,21 @@ async def poll_tick(sessionmaker, secret_key: str) -> None:
                 res = await check_watch(s, watch, secret_key=secret_key)
                 log.info("[%s] %s", watch.store, res)
                 if prev_failures:
-                    cfg = await gotify_config(s, secret_key)
-                    ok = await asyncio.to_thread(
-                        gotify.send, cfg,
-                        f"✅ stock-watch recovered ({watch.store})",
-                        f"Reading {watch.store} again.",
-                        priority=2,
-                    )
-                    if not ok:
-                        log.warning("Gotify recovery notification failed for %s", watch.store)
+                    threshold = int(await get_setting(s, "failure_alert_after", "6") or 6)
+                    was_alerted = (watch.id in _failure_alerted
+                                   or prev_failures >= threshold)
+                    _failure_alerted.discard(watch.id)
+                    if was_alerted:
+                        cfg = await gotify_config(s, secret_key)
+                        ok = await asyncio.to_thread(
+                            gotify.send, cfg,
+                            f"✅ stock-watch recovered ({watch.store})",
+                            f"Reading {watch.store} again.",
+                            priority=2,
+                        )
+                        if not ok:
+                            log.warning("Gotify recovery notification failed for %s",
+                                        watch.store)
             except Exception as e:
                 await s.rollback()
                 watch = await s.get(Watch, w.id)
@@ -61,7 +74,8 @@ async def poll_tick(sessionmaker, secret_key: str) -> None:
                 watch.last_checked_at = now
                 watch.last_error = repr(e)[:500]
                 threshold = int(await get_setting(s, "failure_alert_after", "6") or 6)
-                if watch.consecutive_failures == threshold:
+                if (watch.consecutive_failures >= threshold
+                        and watch.id not in _failure_alerted):
                     cfg = await gotify_config(s, secret_key)
                     ok = await asyncio.to_thread(
                         gotify.send, cfg,
@@ -69,7 +83,9 @@ async def poll_tick(sessionmaker, secret_key: str) -> None:
                         f"{watch.consecutive_failures} checks failed in a row. Last error: {e}",
                         priority=5,
                     )
-                    if not ok:
+                    if ok:
+                        _failure_alerted.add(watch.id)
+                    else:
                         log.warning("Gotify failure alert delivery failed for %s", watch.store)
                 await s.commit()
                 log.warning("[%s] check failed (%d): %r", watch.store, watch.consecutive_failures, e)

@@ -56,6 +56,92 @@ async def test_poll_tick_records_failure_on_exception(sessionmaker_):
         assert "boom" in w2.last_error
 
 
+async def test_recovery_not_sent_after_single_blip(sessionmaker_):
+    """One transient failure (below the alert threshold) must not produce a
+    recovery push for a failure the user was never told about."""
+    from stocktrack import main
+    from stocktrack.models import Watch
+
+    main._failure_alerted.clear()
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="http://x", enabled=True,
+                  consecutive_failures=1)
+        s.add(w)
+        await s.commit()
+
+    with patch("stocktrack.main.check_watch", new_callable=AsyncMock,
+               return_value={}), \
+         patch("stocktrack.main.gotify.send", return_value=True) as mock_send:
+        await main.poll_tick(sessionmaker_, KEY)
+    mock_send.assert_not_called()
+
+
+async def test_recovery_sent_after_alerted_streak(sessionmaker_):
+    from stocktrack import main
+    from stocktrack.models import Watch
+
+    main._failure_alerted.clear()
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="http://x", enabled=True,
+                  consecutive_failures=6)   # >= default threshold of 6
+        s.add(w)
+        await s.commit()
+
+    with patch("stocktrack.main.check_watch", new_callable=AsyncMock,
+               return_value={}), \
+         patch("stocktrack.main.gotify.send", return_value=True) as mock_send:
+        await main.poll_tick(sessionmaker_, KEY)
+    assert mock_send.call_count == 1
+    assert "recovered" in mock_send.call_args[0][1]
+
+
+async def test_failure_alert_fires_once_at_threshold(sessionmaker_):
+    from stocktrack import main
+    from stocktrack.models import Watch
+    from stocktrack.services.settings_service import set_value
+
+    main._failure_alerted.clear()
+    async with sessionmaker_() as s:
+        await set_value(s, "failure_alert_after", "2")
+        w = Watch(store="fake", url="http://x", enabled=True)
+        s.add(w)
+        await s.commit()
+        wid = w.id
+
+    with patch("stocktrack.main.check_watch", new_callable=AsyncMock,
+               side_effect=RuntimeError("boom")), \
+         patch("stocktrack.main.gotify.send", return_value=True) as mock_send:
+        for _ in range(4):     # failures 1..4; threshold 2
+            async with sessionmaker_() as s:   # reset the interval gate
+                w = await s.get(Watch, wid)
+                w.last_checked_at = None
+                await s.commit()
+            await main.poll_tick(sessionmaker_, KEY)
+    assert mock_send.call_count == 1           # at the crossing, not each tick
+    assert "can't read" in mock_send.call_args[0][1]
+
+
+async def test_failure_alert_fires_when_threshold_lowered_mid_streak(sessionmaker_):
+    """Count already past a freshly-lowered threshold: >= (not ==) still fires."""
+    from stocktrack import main
+    from stocktrack.models import Watch
+    from stocktrack.services.settings_service import set_value
+
+    main._failure_alerted.clear()
+    async with sessionmaker_() as s:
+        await set_value(s, "failure_alert_after", "3")
+        w = Watch(store="fake", url="http://x", enabled=True,
+                  consecutive_failures=4)      # already past the new threshold
+        s.add(w)
+        await s.commit()
+
+    with patch("stocktrack.main.check_watch", new_callable=AsyncMock,
+               side_effect=RuntimeError("boom")), \
+         patch("stocktrack.main.gotify.send", return_value=True) as mock_send:
+        await main.poll_tick(sessionmaker_, KEY)
+    assert mock_send.call_count == 1
+
+
 async def test_poll_tick_skips_recently_checked_watch(sessionmaker_):
     """A watch checked more recently than its interval_seconds is skipped."""
     from datetime import datetime, timedelta, timezone
