@@ -291,8 +291,23 @@ async def _dispatch(pending, cfg, sender, threshold, store, now) -> None:
             (a.on_success if ok else a.on_failure)()
 
 
+# One lock per watch id: a manual "Check now" and a scheduler tick would
+# otherwise read the same pre-transition state concurrently, double-firing
+# alerts and duplicating Event rows (which corrupts episode reconstruction).
+_watch_locks: dict[int, asyncio.Lock] = {}
+
+
 async def check_watch(session, watch, *, secret_key, handler=None,
                       fetcher=None, sender=None, now=None) -> dict:
+    """Run one check for a watch, serialised per watch id."""
+    async with _watch_locks.setdefault(watch.id, asyncio.Lock()):
+        return await _check_watch(session, watch, secret_key=secret_key,
+                                  handler=handler, fetcher=fetcher,
+                                  sender=sender, now=now)
+
+
+async def _check_watch(session, watch, *, secret_key, handler=None,
+                       fetcher=None, sender=None, now=None) -> dict:
     handler = handler or get_handler(watch.store, watch.kind)
     fetcher = fetcher or _default_fetcher
     sender = sender or gotify.send

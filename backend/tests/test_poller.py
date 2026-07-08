@@ -1025,6 +1025,47 @@ async def test_oos_to_instock_does_not_fire_lead_time(sessionmaker_):
 
 
 # ---------------------------------------------------------------------------
+# Per-watch lock: manual check vs scheduler tick
+# ---------------------------------------------------------------------------
+
+async def test_concurrent_checks_do_not_double_fire(sessionmaker_):
+    import asyncio
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:  # baseline OOS
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A", "Panel", False, "", 100.0)])
+
+    sent = []
+
+    def sender(cfg, title, message, click_url=None, markdown=False,
+               priority=None, sleep=None):
+        sent.append(title)
+        return True
+
+    async def slow_fetcher(handler, url):
+        await asyncio.sleep(0.05)  # let both checks reach the fetch stage
+        return "raw"
+
+    async def one_check():
+        async with sessionmaker_() as s:
+            w = await s.get(Watch, wid)
+            return await poller.check_watch(
+                s, w, secret_key=KEY,
+                handler=_handler_returning([P("A", "Panel", True, "", 100.0)]),
+                fetcher=slow_fetcher, sender=sender)
+
+    await asyncio.gather(one_check(), one_check())
+    assert len(sent) == 1                     # one push, not two
+    async with sessionmaker_() as s:
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert kinds == ["public"]            # one event, not duplicated
+
+
+# ---------------------------------------------------------------------------
 # Delisted products (absent from the parse) -> OOS after staleness grace
 # ---------------------------------------------------------------------------
 
