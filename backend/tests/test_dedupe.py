@@ -61,6 +61,44 @@ async def test_dry_run_mutates_nothing(sessionmaker_):
     assert len(result[0]["removed_ids"]) == 1
 
 
+async def test_merge_reassigns_real_events_from_non_survivor(sessionmaker_):
+    """Real events on the non-survivor row must be reassigned, not dropped.
+
+    Only a `new_product` event postdating the survivor's first_seen is the
+    false artifact of re-casing; other kinds (e.g. `public`, `oos`) on the
+    non-survivor row are genuine history and must move to the survivor.
+    """
+    async with sessionmaker_() as s:
+        old = _p("A-CIRRO-12K", T0, T0 + timedelta(days=10))
+        new = _p("A-Cirro-12K", T1, T1 + timedelta(hours=1))
+        s.add(old)
+        s.add(new)
+        await s.flush()
+        # Real events on the non-survivor row that must be preserved.
+        s.add(Event(product_id=new.id, ts=T1, kind="public", price=519.0))
+        s.add(Event(product_id=new.id, ts=T1 + timedelta(minutes=30), kind="oos", price=519.0))
+        # False new_product event on the non-survivor row, postdating
+        # survivor.first_seen — this one should still be dropped.
+        s.add(Event(product_id=new.id, ts=T1, kind="new_product", price=519.0))
+        await s.commit()
+
+        result = await merge_duplicate_products(s, dry_run=False)
+        await s.commit()
+
+        prods = (await s.execute(select(Product))).scalars().all()
+        events = (await s.execute(select(Event))).scalars().all()
+
+    assert len(prods) == 1
+    survivor = prods[0]
+    assert result[0]["survivor_id"] == survivor.id
+    assert result[0]["events_moved"] == 2
+    assert result[0]["false_new_product_removed"] == 1
+
+    kinds = sorted(e.kind for e in events)
+    assert kinds == ["oos", "public"]
+    assert all(e.product_id == survivor.id for e in events)
+
+
 async def test_idempotent_second_run_is_noop(sessionmaker_):
     async with sessionmaker_() as s:
         await _seed_recased_pair(s)
