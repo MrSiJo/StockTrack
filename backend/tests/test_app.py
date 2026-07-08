@@ -142,6 +142,40 @@ async def test_failure_alert_fires_when_threshold_lowered_mid_streak(sessionmake
     assert mock_send.call_count == 1
 
 
+async def test_poll_tick_reschedules_on_interval_change(sessionmaker_):
+    """default_interval_seconds is DB-owned: a UI change takes effect live."""
+    from datetime import timedelta
+    from stocktrack.main import poll_tick
+    from stocktrack.services.settings_service import set_value
+
+    async with sessionmaker_() as s:
+        await set_value(s, "default_interval_seconds", "120")
+        await s.commit()
+
+    scheduler = MagicMock()
+    scheduler.get_job.return_value = MagicMock(
+        trigger=MagicMock(interval=timedelta(seconds=300)))
+    await poll_tick(sessionmaker_, KEY, scheduler)
+    scheduler.reschedule_job.assert_called_once_with(
+        "poll", trigger="interval", seconds=120)
+
+
+async def test_poll_tick_no_reschedule_when_interval_unchanged(sessionmaker_):
+    from datetime import timedelta
+    from stocktrack.main import poll_tick
+    from stocktrack.services.settings_service import set_value
+
+    async with sessionmaker_() as s:
+        await set_value(s, "default_interval_seconds", "300")
+        await s.commit()
+
+    scheduler = MagicMock()
+    scheduler.get_job.return_value = MagicMock(
+        trigger=MagicMock(interval=timedelta(seconds=300)))
+    await poll_tick(sessionmaker_, KEY, scheduler)
+    scheduler.reschedule_job.assert_not_called()
+
+
 async def test_poll_tick_skips_recently_checked_watch(sessionmaker_):
     """A watch checked more recently than its interval_seconds is skipped."""
     from datetime import datetime, timedelta, timezone

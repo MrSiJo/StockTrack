@@ -26,10 +26,20 @@ log = logging.getLogger("stocktrack")
 _failure_alerted: set[int] = set()
 
 
-async def poll_tick(sessionmaker, secret_key: str) -> None:
+async def poll_tick(sessionmaker, secret_key: str, scheduler=None) -> None:
     async with sessionmaker() as s:
         watches = (await s.execute(
             select(Watch).where(Watch.enabled.is_(True)))).scalars().all()
+        # Settings are DB-owned: honour a UI change to the tick interval
+        # live by rescheduling our own job when the stored value moves.
+        if scheduler is not None:
+            interval = int(await get_setting(
+                s, "default_interval_seconds", "300") or 300)
+            job = scheduler.get_job("poll")
+            if job is not None and job.trigger.interval.total_seconds() != interval:
+                scheduler.reschedule_job("poll", trigger="interval",
+                                         seconds=interval)
+                log.info("poll interval rescheduled to %ds", interval)
     tick_now = datetime.now(timezone.utc)
     for w in watches:
         async with sessionmaker() as s:
@@ -110,9 +120,12 @@ async def lifespan(app: FastAPI):
         await s.commit()
 
     scheduler = AsyncIOScheduler(timezone=env.tz)
+    # The env value only seeds the first schedule; each tick re-reads the
+    # DB-owned setting and reschedules itself if the UI changed it.
     scheduler.add_job(poll_tick, "interval",
                       seconds=env.default_interval_seconds,
-                      args=[sm, env.app_secret_key], id="poll", max_instances=1)
+                      args=[sm, env.app_secret_key, scheduler],
+                      id="poll", max_instances=1)
     # Digest due-ness is checked against DB-owned settings every tick, so
     # cadence/hour changes in the UI need no rescheduling.
     scheduler.add_job(digest_tick, "interval", minutes=15,
