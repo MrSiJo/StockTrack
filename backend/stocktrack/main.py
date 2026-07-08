@@ -78,6 +78,13 @@ async def poll_tick(sessionmaker, secret_key: str) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     env = get_settings()
+    # uvicorn only attaches handlers to its own loggers; without this the
+    # app's INFO records (per-tick poll results) are silently dropped.
+    # No-op if the root logger already has handlers (e.g. under pytest).
+    logging.basicConfig(
+        level=env.log_level.upper(),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
     engine = make_engine(env.database_url)
     await init_models(engine)
     sm = make_sessionmaker(engine)
