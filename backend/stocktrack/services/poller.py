@@ -226,10 +226,16 @@ class PendingAlert:
 def _group_link(a: "PendingAlert") -> str:
     """One grouped-push body line: a tappable markdown link per product so each
     product in a batched notification is individually reachable (the
-    notification-level click can only target one URL)."""
-    price = (f" — {fmt_price(a.row.current_price)}"
-             if a.row.current_price is not None else "")
-    label = f"{a.row.title or a.row.code}{price}"
+    notification-level click can only target one URL). The link LABEL reuses
+    the alert's own ``group_line`` (emoji + status/kind + any price transition)
+    so a mixed-kind grouped push still tells the reader what happened to each
+    product, not just its title and current price."""
+    label = a.group_line.lstrip()
+    for marker in ("- ", "* ", "• "):  # avoid double-bullets if group_line
+        if label.startswith(marker):        # ever starts with its own marker
+            label = label[len(marker):]
+            break
+    label = label.replace("]", ")")  # keep the markdown link syntax intact
     return f"- [{label}]({a.click_url})" if a.click_url else f"- {label}"
 
 

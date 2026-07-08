@@ -912,8 +912,11 @@ async def test_grouped_send_failure_reverts_all(sessionmaker_):
 
 
 async def test_grouped_push_has_markdown_link_per_product(sessionmaker_):
-    """A grouped push renders each product as a tappable markdown link, and its
-    notification-level click points at the configured dashboard URL."""
+    """A grouped push renders each product as a single tappable markdown link,
+    labelled with the alert's own group_line (emoji + status text), not just
+    "title — price" — so a mixed-kind grouped push still tells the reader
+    what happened to each product. The notification-level click points at the
+    configured dashboard URL."""
     async with sessionmaker_() as s:
         w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
         s.add(w)
@@ -937,9 +940,12 @@ async def test_grouped_push_has_markdown_link_per_product(sessionmaker_):
         grouped = [p for p in sent if "updates" in p["title"].lower()]
         assert grouped, "expected one grouped push"
         body = grouped[0]["message"]
+        assert body.count("](http") == 3   # exactly one link per product, no dupes
         for i in range(3):
-            assert "](http" in body           # markdown links present
-            assert f"Item {i}" in body
+            # label preserves per-kind status context (emoji + "in stock"),
+            # not just the bare "title — price" pair
+            assert (f"[🟢 Item {i}: in stock — £{10.0 + i:.2f}]"
+                    f"(http://shop.local/c{i})") in body
         assert grouped[0]["click_url"] == "http://stocktrack.local"
 
 
