@@ -44,8 +44,7 @@ database (`stocktrack.db`). The containers are otherwise disposable.
 
 Terminate TLS at your proxy and point it at
 `http://<docker-host>:${FRONTEND_PORT:-9181}`. The UI container is the only one
-that needs to be reachable; it proxies `/api` internally. Keep
-`COOKIE_SECURE=true` when serving over HTTPS.
+that needs to be reachable; it proxies `/api` internally.
 
 ## Backups
 

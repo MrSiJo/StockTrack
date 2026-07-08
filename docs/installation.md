@@ -50,8 +50,6 @@ rest, so keep it stable: changing it invalidates the stored token.
 | `APP_SECRET_KEY` | yes | — | 32+ chars (`openssl rand -hex 32`). Encrypts the Gotify token at rest. |
 | `DATABASE_URL` | no | `sqlite+aiosqlite:////data/stocktrack.db` | Async SQLite URL. |
 | `DATA_DIR` | no | `/data` | Data directory inside the container. |
-| `AUTH_ENABLED` | no | `false` | Flag for trusted-LAN deployments. |
-| `COOKIE_SECURE` | no | `true` | Marks cookies secure (HTTPS). |
 | `FRONTEND_PORT` | no | `9181` | Host port mapped to the UI container's `:80`. |
 | `BACKEND_PORT` | no | `9180` | Backend port (also the optional debug host map). |
 | `TZ` | no | `Europe/London` | Timezone for the poll scheduler. |

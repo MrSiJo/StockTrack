@@ -7,8 +7,6 @@ class Settings(BaseSettings):
     app_secret_key: str
     database_url: str = "sqlite+aiosqlite:///./data/stocktrack.db"
     data_dir: str = "./data"
-    auth_enabled: bool = True
-    cookie_secure: bool = True
     backend_port: int = 9180
     log_level: str = "INFO"
     tz: str = "Europe/London"

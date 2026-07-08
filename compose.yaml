@@ -6,8 +6,10 @@ services:
       - stocktrack-data:/data
     expose:
       - "9180"
-    ports:
-      - "9180:9180"   # optional host map — comment out if not needed for debug
+    # The API has no authentication — publishing it on the host bypasses the
+    # nginx proxy entirely. Uncomment only for local debugging.
+    # ports:
+    #   - "9180:9180"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9180/api/health"]
       interval: 30s

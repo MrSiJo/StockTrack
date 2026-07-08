@@ -46,7 +46,7 @@ via the **Watches** tab. Full walkthrough in [docs/setup.md](docs/setup.md).
 - The Gotify token is encrypted at rest using Fernet, keyed by `APP_SECRET_KEY`.
 - No secrets in the repository — only `.env.example` with blank placeholders.
 - Pre-commit hooks: **gitleaks**, **bandit**, **ruff**, and a custom hook that forbids LAN IP literals from being committed.
-- Auth is off by default (`AUTH_ENABLED=false`) — StockTrack is designed for single-operator, trusted-LAN use behind your own reverse proxy.
+- There is no built-in authentication — StockTrack is designed for single-operator, trusted-LAN use behind your own reverse proxy.
 
 ## License
 
