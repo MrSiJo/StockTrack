@@ -7,6 +7,9 @@ describe('watchDisplayName', () => {
   })
   it('falls back to a titled store when label is empty', () => {
     expect(watchDisplayName('', 'cityplumbing')).toBe('City Plumbing')
-    expect(watchDisplayName('  ', 'ao')).toBe('Ao')
+    expect(watchDisplayName('  ', 'ao')).toBe('AO')
+  })
+  it('applies title-case to unmapped stores', () => {
+    expect(watchDisplayName('', 'currys')).toBe('Currys')
   })
 })

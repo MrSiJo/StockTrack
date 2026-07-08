@@ -2,6 +2,7 @@
 // fall back to a friendly store name so the dashboard never shows an empty
 // group header.
 const STORE_NAMES: Record<string, string> = {
+  ao: 'AO',
   cityplumbing: 'City Plumbing',
   johnlewis: 'John Lewis',
 }
