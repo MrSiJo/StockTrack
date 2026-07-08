@@ -1,11 +1,11 @@
 import asyncio
-import re
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
 from sqlalchemy import select
 
+from stocktrack.dateparse import parse_delivery_date
 from stocktrack.models import Event, Product
 from stocktrack.services import gotify
 from stocktrack.services.notify_format import fmt_price, human_duration, md_lines
@@ -128,40 +128,6 @@ def _price_rise_msg(p, old, new) -> str:
     return md_lines(parts)
 
 
-_MONTH_NUMS = {
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
-    "january": 1, "february": 2, "march": 3, "april": 4, "june": 6,
-    "july": 7, "august": 8, "september": 9, "october": 10,
-    "november": 11, "december": 12,
-}
-
-_DELIVERY_DATE_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\b")
-
-
-def _parse_delivery_date(text, now) -> "date | None":
-    """Extract the first day+month from a fulfilment string ("Delivery by
-    Fri 3 Jul", "Home delivery from 3rd July"). Year is inferred as the
-    candidate closest to ``now`` (handles Dec→Jan rollover)."""
-    m = _DELIVERY_DATE_RE.search(text or "")
-    if not m:
-        return None
-    day = int(m.group(1))
-    month = _MONTH_NUMS.get(m.group(2).lower())
-    if not month:
-        return None
-    today = now.date()
-    candidates = []
-    for year in (today.year - 1, today.year, today.year + 1):
-        try:
-            candidates.append(date(year, month, day))
-        except ValueError:
-            continue
-    if not candidates:
-        return None
-    return min(candidates, key=lambda d: abs((d - today).days))
-
-
 def is_lead_time_change_significant(old, new, now, min_days) -> bool:
     """Filter out naturally sliding delivery estimates (e.g. City Plumbing's
     rolling next-day date) — only a date swing of ``min_days``-or-more is
@@ -172,8 +138,8 @@ def is_lead_time_change_significant(old, new, now, min_days) -> bool:
         return True
     if ("collection" in (old or "").lower()) != ("collection" in (new or "").lower()):
         return True
-    d_old = _parse_delivery_date(old, now)
-    d_new = _parse_delivery_date(new, now)
+    d_old = parse_delivery_date(old, now.date())
+    d_new = parse_delivery_date(new, now.date())
     if d_old is None or d_new is None:
         return True
     return abs((d_new - d_old).days) >= min_days

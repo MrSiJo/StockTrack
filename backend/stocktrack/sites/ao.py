@@ -5,6 +5,8 @@ import json
 import os
 import re
 
+from stocktrack.dateparse import parse_delivery_date
+
 from .base import Product, SiteHandler, fetch_html
 
 OOS_STATE = "outofstock"
@@ -13,10 +15,6 @@ EARLY_ACCESS_DAYS = int(os.environ.get("EARLY_ACCESS_DAYS", "30"))
 AO_SETTINGS = [{"key": "ao_member",
                 "label": "I'm an AO member (track AO member price)",
                 "type": "bool", "default": False}]
-
-_MONTHS = {m.lower(): i for i, m in enumerate(
-    ["", "January", "February", "March", "April", "May", "June",
-     "July", "August", "September", "October", "November", "December"])}
 
 class _AoBase(SiteHandler):
     """Shared AO config: early-access threshold + membership flag."""
@@ -86,23 +84,13 @@ def _availability(in_stock, delivery, threshold=None):
     t = threshold if threshold is not None else EARLY_ACCESS_DAYS
     return "early" if days > t else "public"
 
-def _delivery_days_out(text):
-    m = re.search(r"(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)", text or "")
-    if not m:
+def _delivery_days_out(text, today=None):
+    """Days until the delivery date in ``text`` (roll-forward year inference:
+    a delivery estimate is always upcoming). ``today`` is injectable for tests."""
+    today = today or datetime.date.today()
+    when = parse_delivery_date(text, today, roll_forward=True)
+    if when is None:
         return None
-    day, month = int(m.group(1)), _MONTHS.get(m.group(2).strip().lower())
-    if not month:
-        return None
-    today = datetime.date.today()
-    try:
-        when = datetime.date(today.year, month, day)
-    except ValueError:
-        return None
-    if when < today:
-        try:
-            when = datetime.date(today.year + 1, month, day)
-        except ValueError:
-            return None
     return (when - today).days
 
 def _find_products(o):
