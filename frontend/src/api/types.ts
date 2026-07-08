@@ -195,6 +195,7 @@ export interface Settings {
   dashboard_url: string
   cp_delivery_postcode: string
   cp_collection_branch_id: string
+  heartbeat_hours: number
 }
 
 // ── Check result (POST /api/watches/{id}/check) ────────────────────────────
@@ -234,4 +235,5 @@ export interface SettingsUpdate {
   dashboard_url?: string
   cp_delivery_postcode?: string
   cp_collection_branch_id?: string
+  heartbeat_hours?: number
 }

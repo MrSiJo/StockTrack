@@ -27,6 +27,7 @@ interface GotifyForm {
   digest_hour: number
   digest_priority: number
   dashboard_url: string
+  heartbeat_hours: number
 }
 
 const EMPTY_FORM: GotifyForm = {
@@ -53,6 +54,7 @@ const EMPTY_FORM: GotifyForm = {
   digest_hour: 8,
   digest_priority: 4,
   dashboard_url: '',
+  heartbeat_hours: 24,
 }
 
 export function GotifyPage() {
@@ -95,6 +97,7 @@ export function GotifyPage() {
         digest_hour: settings.digest_hour,
         digest_priority: settings.digest_priority,
         dashboard_url: settings.dashboard_url,
+        heartbeat_hours: settings.heartbeat_hours,
       })
       setTokenDirty(false)
     }
@@ -134,6 +137,7 @@ export function GotifyPage() {
         digest_hour: form.digest_hour,
         digest_priority: form.digest_priority,
         dashboard_url: form.dashboard_url,
+        heartbeat_hours: form.heartbeat_hours,
       })
       setTokenDirty(false)
     } catch (e) {
@@ -375,6 +379,22 @@ export function GotifyPage() {
               />
               <p className="mt-1 text-xs text-gray-500">
                 Hide products unseen for N days
+              </p>
+            </div>
+            <div>
+              <label className={labelClass}>Heartbeat (hours)</label>
+              <input
+                type="number"
+                value={form.heartbeat_hours}
+                onChange={(e) =>
+                  set('heartbeat_hours', Number(e.target.value))
+                }
+                className={inputClass}
+                min={0}
+                step={0.5}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Liveness ping every N hours (0 = off)
               </p>
             </div>
             <div>

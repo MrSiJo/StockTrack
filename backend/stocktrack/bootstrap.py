@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     seed_jl_url: str = ""
     product_archive_days: int = 14
     dashboard_url: str = ""
+    heartbeat_hours: float = 24.0
 
     @field_validator("app_secret_key")
     @classmethod

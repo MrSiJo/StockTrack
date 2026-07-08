@@ -194,6 +194,7 @@ class SettingsOut(BaseModel):
     cp_collection_branch_id: str
     product_archive_days: int
     dashboard_url: str
+    heartbeat_hours: float
 
 
 class SettingsUpdate(BaseModel):
@@ -223,6 +224,7 @@ class SettingsUpdate(BaseModel):
     cp_collection_branch_id: Optional[str] = None
     product_archive_days: Optional[int] = None
     dashboard_url: Optional[str] = None
+    heartbeat_hours: Optional[float] = None
 
 
 # ── History ────────────────────────────────────────────────────────────────

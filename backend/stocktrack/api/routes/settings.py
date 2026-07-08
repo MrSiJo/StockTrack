@@ -41,6 +41,7 @@ _PLAIN_SETTING_KEYS = [
     "cp_collection_branch_id",
     "product_archive_days",
     "dashboard_url",
+    "heartbeat_hours",
 ]
 
 
@@ -83,6 +84,7 @@ async def _read_settings(session: AsyncSession, secret_key: str) -> SettingsOut:
         cp_collection_branch_id=await get(session, "cp_collection_branch_id", "") or "",
         product_archive_days=int(await get(session, "product_archive_days", "14") or 14),
         dashboard_url=await get(session, "dashboard_url", "") or "",
+        heartbeat_hours=float(await get(session, "heartbeat_hours", "24") or 24),
     )
 
 

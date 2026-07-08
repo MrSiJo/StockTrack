@@ -32,8 +32,8 @@ async def heartbeat_tick(sessionmaker, secret_key, sender=None, now=None) -> boo
             select(func.max(Watch.last_ok_at))
         )).scalar_one()
         cfg = await gotify_config(session, secret_key)
-        stamp = last_poll.strftime("%H:%M") if last_poll else "never"
-        priority = int(await get(session, "gotify_priority", "4") or 4)
+        stamp = last_poll.strftime("%Y-%m-%d %H:%M") if last_poll else "never"
+        priority = 2  # low priority — a liveness ping shouldn't interrupt
         title = "\U0001f493 StockTrack alive"
         message = f"{n_watches} watches · last poll {stamp}"
         # gotify_service.send is a blocking (sync) call — run it off the event

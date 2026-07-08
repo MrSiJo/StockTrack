@@ -83,6 +83,7 @@ async def test_seed_adds_price_drop_and_member_defaults(sessionmaker_):
         digest_cadence="off", digest_hour=8, digest_priority=4,
         cp_delivery_postcode="", cp_collection_branch_id="",
         product_archive_days=14, dashboard_url="",
+        heartbeat_hours=24.0,
     )
     async with sessionmaker_() as s:
         await seed_from_env(s, env, "k" * 32)
@@ -110,3 +111,4 @@ async def test_new_setting_defaults_seeded(sessionmaker_, monkeypatch):
         assert await get(s, "product_archive_days") == "14"
         assert await get(s, "dashboard_url") == ""
         assert await get(s, "event_retention_days") == "180"
+        assert await get(s, "heartbeat_hours") == "24.0"
