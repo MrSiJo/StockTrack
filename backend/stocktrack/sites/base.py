@@ -1,13 +1,18 @@
 """Shared building blocks for site handlers."""
+import logging
 import os
 import shutil
 import subprocess
-import sys
 import urllib.request
 from dataclasses import dataclass
 from typing import Optional
 
+log = logging.getLogger(__name__)
+
 CURL_IMPERSONATE = os.environ.get("CURL_IMPERSONATE", "chrome")
+# curl-impersonate honours CURL_IMPERSONATE from the environment itself; if
+# left set it pins every request to that target and defeats the per-target
+# fallback chain below. Capture the preference once, then remove it.
 os.environ.pop("CURL_IMPERSONATE", None)
 
 _DEFAULT_FALLBACKS = ["chrome", "firefox", "safari", "edge", "chrome131", "chrome120"]
@@ -61,7 +66,7 @@ def fetch_html(url: str, headers: Optional[dict] = None) -> str:
     return _fetch_via_urllib(url, headers or DEFAULT_HEADERS)
 
 def _warn(msg: str) -> None:
-    print(f"[base.fetch] WARNING: {msg}", file=sys.stderr, flush=True)
+    log.warning("[base.fetch] %s", msg)
 
 def _curl_cffi_available() -> bool:
     try:
