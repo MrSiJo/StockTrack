@@ -68,8 +68,6 @@ Also editable in settings (seeded from env on first boot, then UI-owned):
 - **Early-access window** (`EARLY_ACCESS_DAYS`, default 30) — see above.
 - **Failure alert threshold** (`FAILURE_ALERT_AFTER`, default 6) — consecutive
   scrape failures before a single health-warning push.
-- **Heartbeat** (`HEARTBEAT_HOURS`, default 0 = off) — periodic "still alive"
-  notification.
 
 ## History
 

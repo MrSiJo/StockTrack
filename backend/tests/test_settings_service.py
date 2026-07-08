@@ -60,7 +60,7 @@ async def test_seed_adds_price_drop_and_member_defaults(sessionmaker_):
         gotify_url="", gotify_token="", gotify_priority=7, restock_priority=8,
         new_product_priority=8,
         oos_priority=4, gotify_send_retries=3, default_interval_seconds=300,
-        failure_alert_after=6, heartbeat_hours=0, early_access_days=30,
+        failure_alert_after=6, early_access_days=30,
         ao_member=False, price_drop_min_pct=5, price_drop_min_abs=5,
         price_drop_priority=6, lead_time_priority=5,
         lead_time_min_change_days=7, alert_group_threshold=3,

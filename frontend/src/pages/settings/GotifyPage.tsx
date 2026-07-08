@@ -12,7 +12,6 @@ interface GotifyForm {
   gotify_send_retries: number
   default_interval_seconds: number
   failure_alert_after: number
-  heartbeat_hours: number
   early_access_days: number
   price_drop_min_pct: number
   price_drop_min_abs: number
@@ -36,7 +35,6 @@ const EMPTY_FORM: GotifyForm = {
   gotify_send_retries: 3,
   default_interval_seconds: 300,
   failure_alert_after: 6,
-  heartbeat_hours: 0,
   early_access_days: 30,
   price_drop_min_pct: 5,
   price_drop_min_abs: 5,
@@ -76,7 +74,6 @@ export function GotifyPage() {
         gotify_send_retries: settings.gotify_send_retries,
         default_interval_seconds: settings.default_interval_seconds,
         failure_alert_after: settings.failure_alert_after,
-        heartbeat_hours: settings.heartbeat_hours,
         early_access_days: settings.early_access_days,
         price_drop_min_pct: settings.price_drop_min_pct,
         price_drop_min_abs: settings.price_drop_min_abs,
@@ -113,7 +110,6 @@ export function GotifyPage() {
         gotify_send_retries: form.gotify_send_retries,
         default_interval_seconds: form.default_interval_seconds,
         failure_alert_after: form.failure_alert_after,
-        heartbeat_hours: form.heartbeat_hours,
         early_access_days: form.early_access_days,
         price_drop_min_pct: form.price_drop_min_pct,
         price_drop_min_abs: form.price_drop_min_abs,
@@ -323,19 +319,6 @@ export function GotifyPage() {
                 }
                 className={inputClass}
                 min={1}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Heartbeat hours (0 = off)</label>
-              <input
-                type="number"
-                value={form.heartbeat_hours}
-                onChange={(e) =>
-                  set('heartbeat_hours', Number(e.target.value))
-                }
-                className={inputClass}
-                min={0}
-                step={0.5}
               />
             </div>
             <div>

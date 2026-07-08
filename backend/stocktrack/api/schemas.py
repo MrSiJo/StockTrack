@@ -169,7 +169,6 @@ class SettingsOut(BaseModel):
     gotify_send_retries: int
     default_interval_seconds: int
     failure_alert_after: int
-    heartbeat_hours: float
     early_access_days: int
     ao_member: bool
     price_drop_min_pct: float
@@ -196,7 +195,6 @@ class SettingsUpdate(BaseModel):
     gotify_send_retries: Optional[int] = None
     default_interval_seconds: Optional[int] = None
     failure_alert_after: Optional[int] = None
-    heartbeat_hours: Optional[float] = None
     early_access_days: Optional[int] = None
     ao_member: Optional[bool] = None
     price_drop_min_pct: Optional[float] = None

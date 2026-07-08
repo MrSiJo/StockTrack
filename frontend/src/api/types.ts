@@ -163,7 +163,6 @@ export interface Settings {
   gotify_send_retries: number
   default_interval_seconds: number
   failure_alert_after: number
-  heartbeat_hours: number
   early_access_days: number
   ao_member: boolean
   price_drop_min_pct: number
@@ -200,7 +199,6 @@ export interface SettingsUpdate {
   gotify_send_retries?: number
   default_interval_seconds?: number
   failure_alert_after?: number
-  heartbeat_hours?: number
   early_access_days?: number
   ao_member?: boolean
   price_drop_min_pct?: number

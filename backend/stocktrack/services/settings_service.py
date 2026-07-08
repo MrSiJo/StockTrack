@@ -87,7 +87,6 @@ async def seed_from_env(session, env, secret_key: str) -> None:
         "gotify_send_retries": (str(env.gotify_send_retries), False),
         "default_interval_seconds": (str(env.default_interval_seconds), False),
         "failure_alert_after": (str(env.failure_alert_after), False),
-        "heartbeat_hours": (str(env.heartbeat_hours), False),
         "early_access_days": (str(env.early_access_days), False),
         "ao_member": (str(env.ao_member).lower(), False),
         "price_drop_min_pct": (str(env.price_drop_min_pct), False),

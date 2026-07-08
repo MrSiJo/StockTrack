@@ -62,7 +62,6 @@ rest, so keep it stable: changing it invalidates the stored token.
 | `PRICE_DROP_PRIORITY` | no | `6` | Priority for price-drop alerts. |
 | `GOTIFY_SEND_RETRIES` | no | `3` | Retries on 5xx / network errors (4xx never retried). |
 | `FAILURE_ALERT_AFTER` | no | `6` | Consecutive scrape failures before a health alert. |
-| `HEARTBEAT_HOURS` | no | `0` | Periodic "still alive" heartbeat; `0` disables. |
 | `DEFAULT_INTERVAL_SECONDS` | no | `300` | Poll-loop tick interval. |
 | `EARLY_ACCESS_DAYS` | no | `30` | Delivery-date distance that separates `early` from `public`. |
 | `AO_MEMBER` | no | `false` | Whether the scraping account holds an AO.com membership (affects pricing shown). |
