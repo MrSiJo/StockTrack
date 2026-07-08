@@ -13,6 +13,7 @@ interface GotifyForm {
   default_interval_seconds: number
   failure_alert_after: number
   event_retention_days: number
+  product_archive_days: number
   early_access_days: number
   price_drop_min_pct: number
   price_drop_min_abs: number
@@ -25,6 +26,7 @@ interface GotifyForm {
   digest_cadence: string
   digest_hour: number
   digest_priority: number
+  dashboard_url: string
 }
 
 const EMPTY_FORM: GotifyForm = {
@@ -37,6 +39,7 @@ const EMPTY_FORM: GotifyForm = {
   default_interval_seconds: 300,
   failure_alert_after: 6,
   event_retention_days: 0,
+  product_archive_days: 0,
   early_access_days: 30,
   price_drop_min_pct: 5,
   price_drop_min_abs: 5,
@@ -49,6 +52,7 @@ const EMPTY_FORM: GotifyForm = {
   digest_cadence: 'off',
   digest_hour: 8,
   digest_priority: 4,
+  dashboard_url: '',
 }
 
 export function GotifyPage() {
@@ -77,6 +81,7 @@ export function GotifyPage() {
         default_interval_seconds: settings.default_interval_seconds,
         failure_alert_after: settings.failure_alert_after,
         event_retention_days: settings.event_retention_days,
+        product_archive_days: settings.product_archive_days,
         early_access_days: settings.early_access_days,
         price_drop_min_pct: settings.price_drop_min_pct,
         price_drop_min_abs: settings.price_drop_min_abs,
@@ -89,6 +94,7 @@ export function GotifyPage() {
         digest_cadence: settings.digest_cadence,
         digest_hour: settings.digest_hour,
         digest_priority: settings.digest_priority,
+        dashboard_url: settings.dashboard_url,
       })
       setTokenDirty(false)
     }
@@ -114,6 +120,7 @@ export function GotifyPage() {
         default_interval_seconds: form.default_interval_seconds,
         failure_alert_after: form.failure_alert_after,
         event_retention_days: form.event_retention_days,
+        product_archive_days: form.product_archive_days,
         early_access_days: form.early_access_days,
         price_drop_min_pct: form.price_drop_min_pct,
         price_drop_min_abs: form.price_drop_min_abs,
@@ -126,6 +133,7 @@ export function GotifyPage() {
         digest_cadence: form.digest_cadence,
         digest_hour: form.digest_hour,
         digest_priority: form.digest_priority,
+        dashboard_url: form.dashboard_url,
       })
       setTokenDirty(false)
     } catch (e) {
@@ -294,6 +302,19 @@ export function GotifyPage() {
               max={10}
             />
           </div>
+          <div>
+            <label className={labelClass}>Dashboard URL</label>
+            <input
+              type="url"
+              value={form.dashboard_url}
+              onChange={(e) => set('dashboard_url', e.target.value)}
+              className={inputClass}
+              placeholder="http://stocktrack.local"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Click target for grouped notifications
+            </p>
+          </div>
         </div>
 
         <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
@@ -338,6 +359,23 @@ export function GotifyPage() {
                 className={inputClass}
                 min={0}
               />
+            </div>
+            <div>
+              <label className={labelClass}>
+                Product archive days (0 = never)
+              </label>
+              <input
+                type="number"
+                value={form.product_archive_days}
+                onChange={(e) =>
+                  set('product_archive_days', Number(e.target.value))
+                }
+                className={inputClass}
+                min={0}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Hide products unseen for N days
+              </p>
             </div>
             <div>
               <label className={labelClass}>
