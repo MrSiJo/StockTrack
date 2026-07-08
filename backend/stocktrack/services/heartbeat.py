@@ -1,6 +1,5 @@
 """Periodic liveness push so a silent poller stall is noticeable."""
 import asyncio
-import inspect
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
@@ -38,12 +37,8 @@ async def heartbeat_tick(sessionmaker, secret_key, sender=None, now=None) -> boo
         title = "\U0001f493 StockTrack alive"
         message = f"{n_watches} watches · last poll {stamp}"
         # gotify_service.send is a blocking (sync) call — run it off the event
-        # loop via asyncio.to_thread, matching poller.py / digest.py. Tests may
-        # inject an async fake sender instead; await it directly in that case.
-        if inspect.iscoroutinefunction(send):
-            ok = await send(cfg, title, message, priority=priority)
-        else:
-            ok = await asyncio.to_thread(send, cfg, title, message, priority=priority)
+        # loop via asyncio.to_thread, matching poller.py / digest.py.
+        ok = await asyncio.to_thread(send, cfg, title, message, priority=priority)
         if ok:
             await set_value(session, _LAST_KEY, now.isoformat())
             await session.commit()

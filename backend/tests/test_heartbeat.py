@@ -4,7 +4,7 @@ from stocktrack.services.heartbeat import heartbeat_tick
 
 async def test_heartbeat_respects_interval(sessionmaker_):
     sent = []
-    async def fake_send(cfg, title, message, **kw):
+    def fake_send(cfg, title, message, **kw):
         sent.append((title, message))
         return True
     now = datetime(2026, 7, 8, 6, 0, tzinfo=timezone.utc)
@@ -23,7 +23,7 @@ async def test_heartbeat_respects_interval(sessionmaker_):
     assert len(sent) == 2
 
 async def test_heartbeat_disabled_when_zero(sessionmaker_):
-    async def fake_send(*a, **k):  # pragma: no cover
+    def fake_send(*a, **k):  # pragma: no cover
         raise AssertionError("should not send")
     async with sessionmaker_() as s:
         await set_value(s, "heartbeat_hours", "0")
