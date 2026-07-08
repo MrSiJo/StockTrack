@@ -10,6 +10,18 @@ describe('formatDuration', () => {
   })
 })
 
+describe('formatDuration ladder', () => {
+  it('formats across the ladder', () => {
+    expect(formatDuration(30)).toBe('<1m')
+    expect(formatDuration(90)).toBe('1m')
+    expect(formatDuration(3690)).toBe('1h 01m')
+    expect(formatDuration(24 * 3600)).toBe('1d 0h')
+    expect(formatDuration((6 * 24 + 23) * 3600)).toBe('6d 23h')
+    expect(formatDuration(7 * 24 * 3600)).toBe('1w 0d')
+    expect(formatDuration((2 * 7 + 3) * 24 * 3600)).toBe('2w 3d')
+  })
+})
+
 describe('episodePhases', () => {
   const ep = {
     started_ts: '2026-06-27T06:00:00Z',

@@ -31,11 +31,14 @@ export interface ProductHistory {
 export function formatDuration(seconds: number | null): string {
   if (seconds == null) return '—'
   if (seconds < 60) return '<1m'
-  const m = Math.round(seconds / 60)
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  const rem = m % 60
-  return `${h}h ${String(rem).padStart(2, '0')}m`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ${String(minutes % 60).padStart(2, '0')}m`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ${hours % 24}h`
+  const weeks = Math.floor(days / 7)
+  return `${weeks}w ${days % 7}d`
 }
 
 const hhmm = (iso: string): string =>
