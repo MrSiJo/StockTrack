@@ -1,9 +1,10 @@
 """Tests for additive, idempotent schema migration in init_models."""
-from sqlalchemy import inspect
+from datetime import datetime, timezone
+from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from stocktrack.db import init_models, make_sessionmaker
-from stocktrack.models import Watch
+from stocktrack.models import Watch, Product
 
 
 async def test_init_models_adds_missing_columns(tmp_path):
@@ -55,17 +56,17 @@ async def test_init_models_is_idempotent(tmp_path):
 
 
 async def test_product_has_archive_and_watts_columns(sessionmaker_):
-    from stocktrack.models import Product
-    from datetime import datetime, timezone
     async with sessionmaker_() as s:
+        archived_time = datetime.now(timezone.utc)
         p = Product(
             watch_id=1, store="ao", code="X1", title="t", brand="b",
             url="u", availability="oos", basket_url="", current_in_stock=False,
             first_seen=datetime.now(timezone.utc), last_seen=datetime.now(timezone.utc),
-            spec_watts=435, archived_at=None,
+            spec_watts=435, archived_at=archived_time,
         )
         s.add(p)
         await s.commit()
-        got = (await s.execute(__import__("sqlalchemy").select(Product))).scalars().one()
+        got = (await s.execute(select(Product))).scalars().one()
         assert got.spec_watts == 435
-        assert got.archived_at is None
+        assert got.archived_at is not None
+        assert got.archived_at.tzinfo is not None
