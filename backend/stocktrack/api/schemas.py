@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 # ── Watch ──────────────────────────────────────────────────────────────────
@@ -80,6 +80,14 @@ class ProductOut(BaseModel):
     muted_until: Optional[datetime]
     available_since: Optional[datetime]
     last_checked: Optional[datetime]
+    spec_watts: Optional[int] = None
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def price_per_watt(self) -> Optional[float]:
+        if self.current_price is None or not self.spec_watts:
+            return None
+        return round(self.current_price / self.spec_watts, 4)
 
 
 class MuteIn(BaseModel):
