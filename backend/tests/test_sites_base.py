@@ -40,7 +40,7 @@ class _Sess:
 def test_post_json_returns_parsed_on_200(monkeypatch):
     fake = _Resp(200, '{"data": {"ok": true}}')
     monkeypatch.setattr(base, "_curl_cffi_available", lambda: True)
-    import curl_cffi.requests as creq
+    creq = pytest.importorskip("curl_cffi.requests")
     monkeypatch.setattr(creq, "Session", lambda *a, **k: _Sess(fake))
     out = base.post_json("https://example.test/graphql", {"q": 1})
     assert out == {"data": {"ok": True}}
@@ -49,7 +49,7 @@ def test_post_json_returns_parsed_on_200(monkeypatch):
 def test_post_json_raises_on_non_200(monkeypatch):
     fake = _Resp(500, "nope")
     monkeypatch.setattr(base, "_curl_cffi_available", lambda: True)
-    import curl_cffi.requests as creq
+    creq = pytest.importorskip("curl_cffi.requests")
     monkeypatch.setattr(creq, "Session", lambda *a, **k: _Sess(fake))
     with pytest.raises(RuntimeError):
         base.post_json("https://example.test/graphql", {"q": 1})
@@ -74,7 +74,7 @@ def test_post_json_bot_wall_retries_next_impersonation(monkeypatch):
     monkeypatch.setattr(base, "_curl_cffi_available", lambda: True)
     responses = [_Resp(403, "blocked"), _Resp(200, '{"data": {"ok": true}}')]
     used = []
-    import curl_cffi.requests as creq
+    creq = pytest.importorskip("curl_cffi.requests")
     monkeypatch.setattr(creq, "Session", lambda *a, **k: _SeqSess(responses, used))
     out = base.post_json("https://example.test/graphql", {"q": 1})
     assert out == {"data": {"ok": True}}
@@ -88,7 +88,7 @@ def test_post_json_non_bot_wall_status_does_not_retry(monkeypatch):
     monkeypatch.setattr(base, "_curl_cffi_available", lambda: True)
     responses = [_Resp(500, "boom"), _Resp(200, '{"data": 1}')]
     used = []
-    import curl_cffi.requests as creq
+    creq = pytest.importorskip("curl_cffi.requests")
     monkeypatch.setattr(creq, "Session", lambda *a, **k: _SeqSess(responses, used))
     with pytest.raises(RuntimeError):
         base.post_json("https://example.test/graphql", {"q": 1})
