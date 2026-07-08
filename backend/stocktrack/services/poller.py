@@ -11,6 +11,7 @@ from stocktrack.services import gotify
 from stocktrack.services.notify_format import fmt_price, human_duration, md_lines
 from stocktrack.services.settings_service import get as get_setting
 from stocktrack.services.settings_service import gotify_config, truthy
+from stocktrack.services.specs import parse_watts
 from stocktrack.sites import get_handler
 
 
@@ -285,7 +286,7 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
     parsed = [p for p in handler.parse(raw)
               if p.code and matches(p, watch.include_filter, watch.exclude_filter)]
 
-    rows = {r.code: r for r in (await session.execute(
+    rows = {r.code.casefold(): r for r in (await session.execute(
         select(Product).where(Product.watch_id == watch.id))).scalars().all()}
 
     is_first_poll = len(rows) == 0
@@ -314,7 +315,7 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
     pending: list[PendingAlert] = []
 
     for p in parsed:
-        row = rows.get(p.code)
+        row = rows.get(p.code.casefold())
         if is_first_poll:
             if row is None:
                 row = Product(watch_id=watch.id, store=watch.store, code=p.code,
@@ -324,6 +325,9 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
             row.title, row.brand, row.url = p.title, p.brand, p.url
             row.basket_url, row.delivery = p.basket_url, p.delivery
             row.current_price, row.last_checked, row.last_seen = p.price, now, now
+            row.spec_watts = parse_watts(p.title)
+            if row.archived_at is not None:
+                row.archived_at = None
             row.price_ref = p.price
             row.lowest_price = p.price
             row.availability = curr
@@ -340,6 +344,9 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
             row.title, row.brand, row.url = p.title, p.brand, p.url
             row.basket_url, row.delivery = p.basket_url, p.delivery
             row.current_price, row.last_checked, row.last_seen = p.price, now, now
+            row.spec_watts = parse_watts(p.title)
+            if row.archived_at is not None:
+                row.archived_at = None
             row.price_ref = p.price
             row.lowest_price = p.price
             row.availability = "oos"
@@ -380,6 +387,9 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
         row.basket_url = p.basket_url
         row.delivery = p.delivery
         row.current_price, row.last_checked, row.last_seen = p.price, now, now
+        row.spec_watts = parse_watts(p.title)
+        if row.archived_at is not None:
+            row.archived_at = None
 
         if curr == prev:
             # No phase change — just update availability and current_in_stock

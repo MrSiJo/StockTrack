@@ -1164,6 +1164,70 @@ async def test_empty_parse_never_delists(sessionmaker_):
         assert a.current_in_stock is True
 
 
+# ---------------------------------------------------------------------------
+# Case-insensitive dedup / un-archive / spec_watts (Task 11)
+# ---------------------------------------------------------------------------
+
+async def test_recased_code_is_not_a_new_product(sessionmaker_):
+    """AO re-casing a product code (A-CIRRO-12K -> A-Cirro-12K) must match the
+    existing row, not spawn a duplicate + false new_product alert."""
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    # baseline with UPPER code -> silent baseline
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A-CIRRO-12K", "Meaco 12k", False, "Meaco")])
+    # re-cased code on an established watch
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A-Cirro-12K", "Meaco 12k", False, "Meaco")])
+    async with sessionmaker_() as s:
+        prods = (await s.execute(select(Product))).scalars().all()
+        events = (await s.execute(select(Event))).scalars().all()
+        assert len(prods) == 1
+        assert not any(e.kind == "new_product" for e in events)
+
+
+async def test_reappearing_product_is_unarchived(sessionmaker_):
+    """A product that was archived then reappears in the listing is un-archived."""
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("c", "Panel", False, "")])
+    async with sessionmaker_() as s:
+        row = (await s.execute(select(Product))).scalars().one()
+        row.archived_at = datetime.now(timezone.utc)
+        await s.commit()
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("c", "Panel", False, "")])
+    async with sessionmaker_() as s:
+        row = (await s.execute(select(Product))).scalars().one()
+        assert row.archived_at is None
+
+
+async def test_spec_watts_parsed_from_title(sessionmaker_):
+    """spec_watts is derived from the title on create."""
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("c", "Longi 435W Panel", False, "")])
+    async with sessionmaker_() as s:
+        row = (await s.execute(select(Product))).scalars().one()
+        assert row.spec_watts == 435
+
+
 async def test_lead_time_no_alert_when_unchanged(sessionmaker_):
     from stocktrack.models import Watch
     async with sessionmaker_() as s:
