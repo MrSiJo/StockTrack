@@ -7,6 +7,7 @@ import { EventFeed } from '../components/EventFeed'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { muteProduct, unmuteProduct } from '../api/endpoints'
+import { watchDisplayName } from '../lib/watch'
 import type { WatchStatus, Product, CheckResult } from '../api/types'
 
 function formatPrice(price: number | null): string {
@@ -38,6 +39,13 @@ function formatLeadTime(delivery: string): string {
 function byPriceAsc(a: Product, b: Product): number {
   const pa = a.current_price ?? Infinity
   const pb = b.current_price ?? Infinity
+  return pa - pb
+}
+
+// Best value first; products without a £/W figure sort to the end.
+function byPricePerWattAsc(a: Product, b: Product): number {
+  const pa = a.price_per_watt ?? Infinity
+  const pb = b.price_per_watt ?? Infinity
   return pa - pb
 }
 
@@ -162,10 +170,12 @@ function MuteMenu({
 function ProductRow({
   product,
   showLeadTime,
+  showPpw,
   onChanged,
 }: {
   product: Product
   showLeadTime: boolean
+  showPpw: boolean
   onChanged: () => Promise<void>
 }) {
   return (
@@ -192,9 +202,17 @@ function ProductRow({
       <td className="py-3 px-3 tabular-nums text-sm text-gray-700">
         {formatPrice(product.current_price)}
       </td>
+      {showPpw && (
+        <td className="py-3 px-3 tabular-nums text-sm text-gray-700">
+          {product.price_per_watt != null
+            ? `£${product.price_per_watt.toFixed(2)}/W`
+            : '—'}
+        </td>
+      )}
       {showLeadTime && (
         <td className="py-3 px-3 text-sm text-gray-600">
-          {formatLeadTime(product.delivery)}
+          {/* Out-of-stock ETAs are stale/nominal and misleading — suppress them. */}
+          {product.availability === 'oos' ? '—' : formatLeadTime(product.delivery)}
         </td>
       )}
       <td className="py-3 px-3 tabular-nums text-sm text-gray-500">
@@ -223,13 +241,17 @@ function WatchGroup({
   onCheckNow: (id: number) => Promise<CheckResult>
   onChanged: () => Promise<void>
 }) {
-  const label = watch.label || watch.store
+  const label = watchDisplayName(watch.label, watch.store)
   const [checkNote, setCheckNote] = useState<string | null>(null)
+  const [sortByPpw, setSortByPpw] = useState(false)
   const showLeadTime = watch.products.some((p) => p.delivery)
-  const sortedProducts = [...watch.products].sort(byPriceAsc)
+  const showPpw = watch.products.some((p) => p.price_per_watt != null)
+  const sortedProducts = [...watch.products].sort(
+    sortByPpw ? byPricePerWattAsc : byPriceAsc,
+  )
   const inStockProducts = sortedProducts.filter(isInStock)
   const oosProducts = sortedProducts.filter((p) => !isInStock(p))
-  const colCount = showLeadTime ? 6 : 5
+  const colCount = 5 + (showLeadTime ? 1 : 0) + (showPpw ? 1 : 0)
 
   const handleCheck = async () => {
     setCheckNote(null)
@@ -281,6 +303,18 @@ function WatchGroup({
               <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 Price
               </th>
+              {showPpw && (
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                  <button
+                    type="button"
+                    onClick={() => setSortByPpw((s) => !s)}
+                    className="flex items-center gap-1 hover:text-gray-800"
+                    title="Sort by £/W"
+                  >
+                    £/W {sortByPpw ? '↑' : ''}
+                  </button>
+                </th>
+              )}
               {showLeadTime && (
                 <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                   Lead time
@@ -318,6 +352,7 @@ function WatchGroup({
                         key={p.id}
                         product={p}
                         showLeadTime={showLeadTime}
+                        showPpw={showPpw}
                         onChanged={onChanged}
                       />
                     ))}
@@ -335,6 +370,7 @@ function WatchGroup({
                         key={p.id}
                         product={p}
                         showLeadTime={showLeadTime}
+                        showPpw={showPpw}
                         onChanged={onChanged}
                       />
                     ))}
