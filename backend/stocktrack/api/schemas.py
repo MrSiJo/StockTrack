@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 # ── Watch ──────────────────────────────────────────────────────────────────
@@ -80,6 +80,14 @@ class ProductOut(BaseModel):
     muted_until: Optional[datetime]
     available_since: Optional[datetime]
     last_checked: Optional[datetime]
+    spec_watts: Optional[int] = None
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def price_per_watt(self) -> Optional[float]:
+        if self.current_price is None or not self.spec_watts:
+            return None
+        return round(self.current_price / self.spec_watts, 4)
 
 
 class MuteIn(BaseModel):
@@ -184,6 +192,9 @@ class SettingsOut(BaseModel):
     digest_priority: int
     cp_delivery_postcode: str
     cp_collection_branch_id: str
+    product_archive_days: int
+    dashboard_url: str
+    heartbeat_hours: float
 
 
 class SettingsUpdate(BaseModel):
@@ -211,6 +222,9 @@ class SettingsUpdate(BaseModel):
     digest_priority: Optional[int] = None
     cp_delivery_postcode: Optional[str] = None
     cp_collection_branch_id: Optional[str] = None
+    product_archive_days: Optional[int] = None
+    dashboard_url: Optional[str] = None
+    heartbeat_hours: Optional[float] = None
 
 
 # ── History ────────────────────────────────────────────────────────────────
@@ -247,3 +261,15 @@ class ProductHistoryOut(BaseModel):
     product: ProductRefOut
     summary: HistorySummaryOut
     episodes: list[EpisodeOut]
+
+
+# ── Restock patterns ─────────────────────────────────────────────────────────
+
+class RestockPatternOut(BaseModel):
+    watch_id: int
+    store: str
+    label: str
+    samples: int
+    by_hour: list[int]
+    by_weekday: list[int]
+    summary: str

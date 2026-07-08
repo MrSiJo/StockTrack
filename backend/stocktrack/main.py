@@ -12,7 +12,9 @@ from stocktrack.db import init_models, make_engine, make_sessionmaker
 from stocktrack.models import Watch
 from stocktrack.seed import seed_default_watches
 from stocktrack.services import gotify
+from stocktrack.services.archival import archival_tick
 from stocktrack.services.digest import digest_tick
+from stocktrack.services.heartbeat import heartbeat_tick
 from stocktrack.services.poller import check_watch
 from stocktrack.services.retention import retention_tick
 from stocktrack.services.settings_service import get as get_setting, gotify_config, seed_from_env
@@ -135,6 +137,13 @@ async def lifespan(app: FastAPI):
     # Event retention: daily sweep, no-op while event_retention_days is 0.
     scheduler.add_job(retention_tick, "interval", hours=24,
                       args=[sm], id="retention", max_instances=1)
+    # Soft-archive stale OOS products, no-op while product_archive_days is 0.
+    scheduler.add_job(archival_tick, "interval", hours=6,
+                      args=[sm], id="archival", max_instances=1)
+    # Liveness push so a silent poller stall is noticeable; no-op while
+    # heartbeat_hours is 0.
+    scheduler.add_job(heartbeat_tick, "interval", hours=1,
+                      args=[sm, env.app_secret_key], id="heartbeat", max_instances=1)
     scheduler.start()
 
     app.state.engine = engine
@@ -152,6 +161,7 @@ def create_app() -> FastAPI:
     from stocktrack.api.routes.events import router as events_router
     from stocktrack.api.routes.history import router as history_router
     from stocktrack.api.routes.products import router as products_router
+    from stocktrack.api.routes.restock import router as restock_router
     from stocktrack.api.routes.settings import router as settings_router
     from stocktrack.api.routes.status import router as status_router
     from stocktrack.api.routes.stores import router as stores_router
@@ -175,6 +185,7 @@ def create_app() -> FastAPI:
     app.include_router(events_router, prefix="/api")
     app.include_router(history_router, prefix="/api")
     app.include_router(products_router, prefix="/api")
+    app.include_router(restock_router, prefix="/api")
     app.include_router(stores_router, prefix="/api")
     app.include_router(watches_router, prefix="/api")
     app.include_router(settings_router, prefix="/api")

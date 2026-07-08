@@ -19,7 +19,8 @@ def _handler_returning(products):
 async def _run(session, watch, products, *, sends_ok=True, now=None):
     sent = []
     def sender(cfg, title, message, click_url=None, markdown=False, priority=None, sleep=None):
-        sent.append({"title": title, "priority": priority, "click_url": click_url})
+        sent.append({"title": title, "message": message,
+                     "priority": priority, "click_url": click_url})
         return sends_ok
     async def fetcher(handler, url):
         return "raw"
@@ -910,6 +911,44 @@ async def test_grouped_send_failure_reverts_all(sessionmaker_):
         assert all(not r.current_in_stock for r in rows)
 
 
+async def test_grouped_push_has_markdown_link_per_product(sessionmaker_):
+    """A grouped push renders each product as a single tappable markdown link,
+    labelled with the alert's own group_line (emoji + status text), not just
+    "title — price" — so a mixed-kind grouped push still tells the reader
+    what happened to each product. The notification-level click points at the
+    configured dashboard URL."""
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+        await _set(s, "dashboard_url", "http://stocktrack.local")
+        await _set(s, "alert_group_threshold", 2)
+    # baseline OOS
+    prods_oos = [P(f"c{i}", f"Item {i}", False, "", url=f"http://shop.local/c{i}")
+                 for i in range(3)]
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, prods_oos)
+    # all come into stock at once
+    prods_in = [P(f"c{i}", f"Item {i}", True, "", 10.0 + i, url=f"http://shop.local/c{i}")
+                for i in range(3)]
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, prods_in)
+        assert res["public"] == 3
+        grouped = [p for p in sent if "updates" in p["title"].lower()]
+        assert grouped, "expected one grouped push"
+        body = grouped[0]["message"]
+        assert body.count("](http") == 3   # exactly one link per product, no dupes
+        for i in range(3):
+            # label preserves per-kind status context (emoji + "in stock"),
+            # not just the bare "title — price" pair
+            assert (f"[🟢 Item {i}: in stock — £{10.0 + i:.2f}]"
+                    f"(http://shop.local/c{i})") in body
+        assert grouped[0]["click_url"] == "http://stocktrack.local"
+
+
 # ---------------------------------------------------------------------------
 # Lead-time slide suppression
 # ---------------------------------------------------------------------------
@@ -1162,6 +1201,70 @@ async def test_empty_parse_never_delists(sessionmaker_):
         assert res["oos"] == 0 and sent == []
         a = (await s.execute(select(Product).where(Product.code == "A"))).scalar_one()
         assert a.current_in_stock is True
+
+
+# ---------------------------------------------------------------------------
+# Case-insensitive dedup / un-archive / spec_watts (Task 11)
+# ---------------------------------------------------------------------------
+
+async def test_recased_code_is_not_a_new_product(sessionmaker_):
+    """AO re-casing a product code (A-CIRRO-12K -> A-Cirro-12K) must match the
+    existing row, not spawn a duplicate + false new_product alert."""
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    # baseline with UPPER code -> silent baseline
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A-CIRRO-12K", "Meaco 12k", False, "Meaco")])
+    # re-cased code on an established watch
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("A-Cirro-12K", "Meaco 12k", False, "Meaco")])
+    async with sessionmaker_() as s:
+        prods = (await s.execute(select(Product))).scalars().all()
+        events = (await s.execute(select(Event))).scalars().all()
+        assert len(prods) == 1
+        assert not any(e.kind == "new_product" for e in events)
+
+
+async def test_reappearing_product_is_unarchived(sessionmaker_):
+    """A product that was archived then reappears in the listing is un-archived."""
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("c", "Panel", False, "")])
+    async with sessionmaker_() as s:
+        row = (await s.execute(select(Product))).scalars().one()
+        row.archived_at = datetime.now(timezone.utc)
+        await s.commit()
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("c", "Panel", False, "")])
+    async with sessionmaker_() as s:
+        row = (await s.execute(select(Product))).scalars().one()
+        assert row.archived_at is None
+
+
+async def test_spec_watts_parsed_from_title(sessionmaker_):
+    """spec_watts is derived from the title on create."""
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        await _run(s, w, [P("c", "Longi 435W Panel", False, "")])
+    async with sessionmaker_() as s:
+        row = (await s.execute(select(Product))).scalars().one()
+        assert row.spec_watts == 435
 
 
 async def test_lead_time_no_alert_when_unchanged(sessionmaker_):

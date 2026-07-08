@@ -25,6 +25,8 @@ class Product(Base):
     lowest_price: Mapped[Optional[float]] = mapped_column(default=None)
     muted_until: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     available_since: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
+    spec_watts: Mapped[int | None] = mapped_column(default=None)
+    archived_at: Mapped[datetime | None] = mapped_column(UTCDateTime, default=None)
     last_checked: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     first_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     last_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

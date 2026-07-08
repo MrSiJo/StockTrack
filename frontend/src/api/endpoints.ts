@@ -13,6 +13,7 @@ import type {
   Settings,
   SettingsUpdate,
   CheckResult,
+  RestockPattern,
 } from './types'
 import type { ProductHistory } from '../lib/history'
 
@@ -43,3 +44,5 @@ export const unmuteProduct = (id: number) =>
   api.delete<Product>(`/products/${id}/mute`)
 export const getPriceHistory = (id: number) =>
   api.get<PricePoint[]>(`/products/${id}/price-history`)
+export const getRestockPatterns = () =>
+  api.get<RestockPattern[]>('/restock-patterns')

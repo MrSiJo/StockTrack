@@ -82,6 +82,8 @@ async def test_seed_adds_price_drop_and_member_defaults(sessionmaker_):
         price_drop_in_stock_only=True,
         digest_cadence="off", digest_hour=8, digest_priority=4,
         cp_delivery_postcode="", cp_collection_branch_id="",
+        product_archive_days=14, dashboard_url="",
+        heartbeat_hours=24.0,
     )
     async with sessionmaker_() as s:
         await seed_from_env(s, env, "k" * 32)
@@ -90,3 +92,23 @@ async def test_seed_adds_price_drop_and_member_defaults(sessionmaker_):
         assert await get(s, "price_drop_min_abs") == "5"
         assert await get(s, "price_drop_priority") == "6"
         assert await get(s, "alert_group_threshold") == "3"
+
+
+async def test_new_setting_defaults_seeded(sessionmaker_, monkeypatch):
+    """Fresh install: product_archive_days, dashboard_url, and the new
+    event_retention_days default (180) are all seeded from bootstrap Settings.
+
+    Note: seeded via a real bootstrap.Settings() rather than a bare `{}`,
+    because seed_from_env reads every default via attribute access
+    (env.gotify_url, env.product_archive_days, ...) — matching the existing
+    convention in this module rather than dict-style .get() lookups.
+    """
+    monkeypatch.setenv("APP_SECRET_KEY", KEY)
+    get_settings.cache_clear()
+    env = Settings()
+    async with sessionmaker_() as s:
+        await seed_from_env(s, env, secret_key=KEY)
+        assert await get(s, "product_archive_days") == "14"
+        assert await get(s, "dashboard_url") == ""
+        assert await get(s, "event_retention_days") == "180"
+        assert await get(s, "heartbeat_hours") == "24.0"

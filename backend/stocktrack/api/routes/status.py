@@ -13,7 +13,7 @@ router = APIRouter()
 async def get_status(session: AsyncSession = Depends(get_session)):
     watches = (await session.execute(select(Watch))).scalars().all()
     by_watch: dict[int, list[Product]] = {}
-    for p in (await session.execute(select(Product))).scalars().all():
+    for p in (await session.execute(select(Product).where(Product.archived_at.is_(None)))).scalars().all():
         by_watch.setdefault(p.watch_id, []).append(p)
     result = []
     for w in watches:

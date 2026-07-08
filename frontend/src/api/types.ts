@@ -20,6 +20,8 @@ export interface Product {
   muted_until: string | null    // ISO datetime; product is muted until then
   available_since: string | null
   last_checked: string | null
+  spec_watts?: number | null
+  price_per_watt?: number | null
 }
 
 // ── Price history (GET /api/products/{id}/price-history) ───────────────────
@@ -152,6 +154,18 @@ export interface PreviewProduct {
   basket_url: string
 }
 
+// ── Restock Pattern (GET /api/watches/{id}/restock-pattern) ────────────────
+
+export interface RestockPattern {
+  watch_id: number
+  store: string
+  label: string
+  samples: number
+  by_hour: number[]
+  by_weekday: number[]
+  summary: string
+}
+
 // ── Settings (GET/PUT /api/settings) ───────────────────────────────────────
 
 export interface Settings {
@@ -164,6 +178,7 @@ export interface Settings {
   default_interval_seconds: number
   failure_alert_after: number
   event_retention_days: number
+  product_archive_days: number
   early_access_days: number
   ao_member: boolean
   price_drop_min_pct: number
@@ -177,8 +192,10 @@ export interface Settings {
   digest_cadence: string       // 'off' | 'daily' | 'weekly'
   digest_hour: number
   digest_priority: number
+  dashboard_url: string
   cp_delivery_postcode: string
   cp_collection_branch_id: string
+  heartbeat_hours: number
 }
 
 // ── Check result (POST /api/watches/{id}/check) ────────────────────────────
@@ -201,6 +218,7 @@ export interface SettingsUpdate {
   default_interval_seconds?: number
   failure_alert_after?: number
   event_retention_days?: number
+  product_archive_days?: number
   early_access_days?: number
   ao_member?: boolean
   price_drop_min_pct?: number
@@ -214,6 +232,8 @@ export interface SettingsUpdate {
   digest_cadence?: string
   digest_hour?: number
   digest_priority?: number
+  dashboard_url?: string
   cp_delivery_postcode?: string
   cp_collection_branch_id?: string
+  heartbeat_hours?: number
 }

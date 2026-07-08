@@ -28,3 +28,18 @@ export function shouldShowBasketButton(
 ): boolean {
   return availability === 'early' && Boolean(basketUrl)
 }
+
+export type ProductLink = { href: string; label: string; kind: 'basket' | 'product' | 'muted' }
+
+export function productLinkFor(
+  availability: string,
+  url: string,
+  basketUrl: string,
+): ProductLink | null {
+  if (availability === 'early' && basketUrl)
+    return { href: basketUrl, label: '🛒 Add to basket ↗', kind: 'basket' }
+  if (availability === 'public' && url)
+    return { href: url, label: 'Open product page ↗', kind: 'product' }
+  if (url) return { href: url, label: 'View product page ↗', kind: 'muted' }
+  return null
+}

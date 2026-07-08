@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getPhaseDisplay, shouldShowBasketButton } from '../lib/phase'
+import { getPhaseDisplay, shouldShowBasketButton, productLinkFor } from '../lib/phase'
 
 describe('getPhaseDisplay', () => {
   it('maps oos to OOS with red icon', () => {
@@ -60,5 +60,23 @@ describe('shouldShowBasketButton', () => {
 
   it('returns false when availability is blank string', () => {
     expect(shouldShowBasketButton('', 'https://ao.com/basket')).toBe(false)
+  })
+})
+
+describe('productLinkFor', () => {
+  it('early -> basket', () => {
+    expect(productLinkFor('early', 'u', 'b')).toEqual(
+      { href: 'b', label: '🛒 Add to basket ↗', kind: 'basket' })
+  })
+  it('public -> product url', () => {
+    expect(productLinkFor('public', 'u', '')).toEqual(
+      { href: 'u', label: 'Open product page ↗', kind: 'product' })
+  })
+  it('oos still links to product url (muted)', () => {
+    expect(productLinkFor('oos', 'u', '')).toEqual(
+      { href: 'u', label: 'View product page ↗', kind: 'muted' })
+  })
+  it('no url -> null', () => {
+    expect(productLinkFor('oos', '', '')).toBeNull()
   })
 })

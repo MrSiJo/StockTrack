@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import select
 
 from stocktrack.models import Event, Product, Watch
 from stocktrack.services.digest import build_digest, digest_tick
