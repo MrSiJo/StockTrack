@@ -1,7 +1,7 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stocktrack.api.deps import get_session
@@ -161,15 +161,8 @@ async def delete_watch(
     w = await session.get(Watch, watch_id)
     if w is None:
         raise HTTPException(status_code=404, detail="Watch not found")
-    products = (await session.execute(
-        select(Product).where(Product.watch_id == watch_id)
-    )).scalars().all()
-    for p in products:
-        events = (await session.execute(
-            select(Event).where(Event.product_id == p.id)
-        )).scalars().all()
-        for e in events:
-            await session.delete(e)
-        await session.delete(p)
+    await session.execute(delete(Event).where(Event.product_id.in_(
+        select(Product.id).where(Product.watch_id == watch_id))))
+    await session.execute(delete(Product).where(Product.watch_id == watch_id))
     await session.delete(w)
     await session.commit()

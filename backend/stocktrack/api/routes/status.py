@@ -12,11 +12,12 @@ router = APIRouter()
 @router.get("/status", response_model=list[WatchStatusOut])
 async def get_status(session: AsyncSession = Depends(get_session)):
     watches = (await session.execute(select(Watch))).scalars().all()
+    by_watch: dict[int, list[Product]] = {}
+    for p in (await session.execute(select(Product))).scalars().all():
+        by_watch.setdefault(p.watch_id, []).append(p)
     result = []
     for w in watches:
-        products = (await session.execute(
-            select(Product).where(Product.watch_id == w.id)
-        )).scalars().all()
+        products = by_watch.get(w.id, [])
         result.append(WatchStatusOut(
             id=w.id,
             store=w.store,
