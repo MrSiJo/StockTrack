@@ -52,3 +52,20 @@ async def test_init_models_is_idempotent(tmp_path):
         )
     assert "kind" in cols and "track_price_drops" in cols
     await engine.dispose()
+
+
+async def test_product_has_archive_and_watts_columns(sessionmaker_):
+    from stocktrack.models import Product
+    from datetime import datetime, timezone
+    async with sessionmaker_() as s:
+        p = Product(
+            watch_id=1, store="ao", code="X1", title="t", brand="b",
+            url="u", availability="oos", basket_url="", current_in_stock=False,
+            first_seen=datetime.now(timezone.utc), last_seen=datetime.now(timezone.utc),
+            spec_watts=435, archived_at=None,
+        )
+        s.add(p)
+        await s.commit()
+        got = (await s.execute(__import__("sqlalchemy").select(Product))).scalars().one()
+        assert got.spec_watts == 435
+        assert got.archived_at is None
