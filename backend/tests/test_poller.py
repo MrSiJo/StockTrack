@@ -1024,6 +1024,105 @@ async def test_oos_to_instock_does_not_fire_lead_time(sessionmaker_):
         assert "lead_time" not in kinds
 
 
+# ---------------------------------------------------------------------------
+# Delisted products (absent from the parse) -> OOS after staleness grace
+# ---------------------------------------------------------------------------
+
+from datetime import timedelta  # noqa: E402
+
+T0 = datetime(2026, 7, 1, 10, 0, 0, tzinfo=timezone.utc)
+BOTH = [P("A", "Panel A", True, "", 100.0), P("B", "Panel B", True, "", 150.0)]
+ONLY_B = [P("B", "Panel B", True, "", 150.0)]
+
+
+async def _delist_watch(sessionmaker_):
+    async with sessionmaker_() as s:
+        w = Watch(store="fake", url="u", include_filter="", exclude_filter="")
+        s.add(w)
+        await s.commit()
+        wid = w.id
+    async with sessionmaker_() as s:  # silent baseline, A+B in stock
+        w = await s.get(Watch, wid)
+        await _run(s, w, BOTH, now=T0)
+    return wid
+
+
+async def test_delisted_product_waits_out_grace_then_goes_oos(sessionmaker_):
+    wid = await _delist_watch(sessionmaker_)
+    # 1st absent tick: within the 2-tick grace -> no transition
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, ONLY_B, now=T0 + timedelta(seconds=301))
+        assert res["oos"] == 0 and sent == []
+        a = (await s.execute(select(Product).where(Product.code == "A"))).scalar_one()
+        assert a.current_in_stock is True
+    # 2nd absent tick: last_seen is now > 2 * interval_seconds old -> OOS
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, ONLY_B, now=T0 + timedelta(seconds=700))
+        assert res["oos"] == 1
+        assert any("No longer listed" in x["title"] for x in sent)
+        a = (await s.execute(select(Product).where(Product.code == "A"))).scalar_one()
+        assert a.current_in_stock is False and a.availability == "oos"
+        assert a.available_since is None
+        ev = (await s.execute(select(Event))).scalar_one()
+        assert ev.kind == "oos" and ev.available_seconds == 700
+
+
+async def test_delisted_send_failure_is_delivery_safe(sessionmaker_):
+    wid = await _delist_watch(sessionmaker_)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, _ = await _run(s, w, ONLY_B, now=T0 + timedelta(seconds=700),
+                            sends_ok=False)
+        assert res["oos"] == 0
+        a = (await s.execute(select(Product).where(Product.code == "A"))).scalar_one()
+        assert a.current_in_stock is True   # reverted -> retries next tick
+        assert (await s.execute(select(Event))).scalars().all() == []
+
+
+async def test_product_reappearing_within_grace_resets_clock(sessionmaker_):
+    wid = await _delist_watch(sessionmaker_)
+    t1 = T0 + timedelta(seconds=301)
+    async with sessionmaker_() as s:  # absent once (within grace)
+        w = await s.get(Watch, wid)
+        await _run(s, w, ONLY_B, now=t1)
+    t2 = T0 + timedelta(seconds=650)
+    async with sessionmaker_() as s:  # reappears -> no alert, last_seen refreshed
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, BOTH, now=t2)
+        assert res["oos"] == 0 and sent == []
+        a = (await s.execute(select(Product).where(Product.code == "A"))).scalar_one()
+        assert a.current_in_stock is True and a.last_seen == t2
+
+
+async def test_delisted_then_relisted_fires_restock(sessionmaker_):
+    wid = await _delist_watch(sessionmaker_)
+    t_oos = T0 + timedelta(seconds=700)
+    async with sessionmaker_() as s:  # delisted -> oos
+        w = await s.get(Watch, wid)
+        await _run(s, w, ONLY_B, now=t_oos)
+    async with sessionmaker_() as s:  # relisted in stock -> normal restock alert
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, BOTH, now=t_oos + timedelta(seconds=300))
+        assert res["public"] == 1
+        assert any("In stock" in x["title"] for x in sent)
+        kinds = [e.kind for e in (await s.execute(select(Event))).scalars().all()]
+        assert kinds == ["oos", "public"]
+
+
+async def test_empty_parse_never_delists(sessionmaker_):
+    """A parse returning nothing is indistinguishable from a broken page —
+    it must not mass-delist the watch."""
+    wid = await _delist_watch(sessionmaker_)
+    async with sessionmaker_() as s:
+        w = await s.get(Watch, wid)
+        res, sent = await _run(s, w, [], now=T0 + timedelta(seconds=700))
+        assert res["oos"] == 0 and sent == []
+        a = (await s.execute(select(Product).where(Product.code == "A"))).scalar_one()
+        assert a.current_in_stock is True
+
+
 async def test_lead_time_no_alert_when_unchanged(sessionmaker_):
     from stocktrack.models import Watch
     async with sessionmaker_() as s:

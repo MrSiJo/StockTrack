@@ -1,7 +1,7 @@
 import asyncio
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable, Optional
 
 from sqlalchemy import select
@@ -85,6 +85,16 @@ def _oos_msg(p, secs):
     parts = [f"Was buyable for ~{dur}." if dur else "Was briefly available."]
     if p.url:
         parts.append(f"[Open product page ↗]({p.url})")
+    return md_lines(parts)
+
+
+def _delisted_msg(row, secs):
+    dur = human_duration(secs)
+    parts = ["No longer listed on the page."]
+    if dur:
+        parts.append(f"Was buyable for ~{dur}.")
+    if row.url:
+        parts.append(f"[Open product page ↗]({row.url})")
     return md_lines(parts)
 
 
@@ -586,6 +596,51 @@ async def check_watch(session, watch, *, secret_key, handler=None,
                 click_url=p.url or None, priority=lead_time_priority,
                 on_success=_lt_ok, on_failure=_lt_fail,
                 group_line=f"🚚 {p.title or p.code}: delivery changed",
+            ))
+
+    # Delisted products: rows in the DB but absent from the parse would
+    # otherwise stay "in stock" forever (retailers routinely delist OOS
+    # items). Treat a row that is absent AND stale — last_seen older than
+    # two ticks — as an OOS transition, via the same delivery-safe pending
+    # machinery. The 2-tick grace avoids flapping on partial-page parses;
+    # an empty parse is indistinguishable from a broken page, so skip it.
+    if not is_first_poll and parsed:
+        parsed_codes = {p.code for p in parsed}
+        stale_after = timedelta(seconds=2 * watch.interval_seconds)
+        for row in rows.values():
+            if row.code in parsed_codes:
+                continue
+            prev = _phase(row.availability, row.current_in_stock)
+            if prev == "oos":
+                continue
+            last_seen = _utc(row.last_seen)
+            if last_seen is not None and now - last_seen < stale_after:
+                continue
+            prev_since = _utc(row.available_since)
+            secs = (now - prev_since).total_seconds() if prev_since else None
+
+            def _dl_ok(row=row, secs=secs):
+                session.add(Event(product_id=row.id, kind="oos",
+                                  price=row.current_price,
+                                  available_seconds=int(secs) if secs else None))
+                row.availability = "oos"
+                row.current_in_stock = False
+                row.available_since = None
+                counts["oos"] += 1
+
+            def _dl_fail(row=row, prev=prev, prev_since=prev_since):
+                # Delivery-safe: keep it available, retry next tick
+                row.availability = prev
+                row.current_in_stock = True
+                row.available_since = prev_since
+
+            pending.append(PendingAlert(
+                row=row, kind="oos",
+                title=f"🔴 {watch.store} · No longer listed: {row.title or row.code}",
+                message=_delisted_msg(row, secs),
+                click_url=row.url or None, priority=oos_priority,
+                on_success=_dl_ok, on_failure=_dl_fail,
+                group_line=f"🔴 {row.title or row.code}: no longer listed",
             ))
 
     threshold = int(await get_setting(session, "alert_group_threshold", "3") or 3)
