@@ -32,7 +32,7 @@ Useful for fast iteration. Run the backend and frontend in two terminals.
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # runtime deps + pytest
 # minimal env: a 32+ char secret and a local SQLite DB
 export APP_SECRET_KEY=$(openssl rand -hex 32)
 export DATABASE_URL="sqlite+aiosqlite:///./data/stocktrack.db"
