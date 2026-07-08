@@ -4,20 +4,23 @@ def fmt_price(price: float) -> str:
     return f"£{price:.2f}"
 
 def human_duration(seconds) -> str:
-    """Human-readable duration from seconds, e.g. '5m', '1h 30m', '45s'."""
+    """Human-readable duration from seconds, e.g. '5m', '1h 30m', '45s', '1d 0h', '2w 3d'."""
     if seconds is None:
         return ""
-    secs = int(seconds)
-    if secs < 60:
-        return f"{secs}s"
-    mins = secs // 60
-    if mins < 60:
-        return f"{mins}m"
-    hours = mins // 60
-    rem_mins = mins % 60
-    if rem_mins:
-        return f"{hours}h {rem_mins}m"
-    return f"{hours}h"
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h {minutes % 60}m"
+    days = hours // 24
+    if days < 7:
+        return f"{days}d {hours % 24}h"
+    weeks = days // 7
+    return f"{weeks}w {days % 7}d"
 
 def md_lines(parts: list[str]) -> str:
     """Join non-empty parts with newlines."""

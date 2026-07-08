@@ -10,7 +10,7 @@ def test_human_duration_seconds():
 
 def test_human_duration_minutes():
     assert human_duration(300) == "5m"
-    assert human_duration(3600) == "1h"
+    assert human_duration(3600) == "1h 0m"
     assert human_duration(3660) == "1h 1m"
 
 def test_human_duration_none():
@@ -19,3 +19,12 @@ def test_human_duration_none():
 def test_md_lines():
     assert md_lines(["a", "", "b"]) == "a\nb"
     assert md_lines([]) == ""
+
+def test_human_duration_ladder():
+    assert human_duration(30) == "30s"
+    assert human_duration(90) == "1m"
+    assert human_duration(3690) == "1h 1m"
+    assert human_duration(24 * 3600) == "1d 0h"
+    assert human_duration((6 * 24 + 23) * 3600) == "6d 23h"
+    assert human_duration(7 * 24 * 3600) == "1w 0d"
+    assert human_duration((2 * 7 + 3) * 24 * 3600) == "2w 3d"
