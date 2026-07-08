@@ -28,6 +28,16 @@ export interface ProductHistory {
   episodes: Episode[]
 }
 
+// History entries don't carry a watch_id (only `store`), so restock patterns
+// are matched by store name. If multiple watches share a store, the first
+// match wins.
+export function findRestockPattern<T extends { store: string }>(
+  patterns: T[],
+  store: string,
+): T | undefined {
+  return patterns.find((p) => p.store === store)
+}
+
 export function formatDuration(seconds: number | null): string {
   if (seconds == null) return '—'
   if (seconds < 60) return '<1m'

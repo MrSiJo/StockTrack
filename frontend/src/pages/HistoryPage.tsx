@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { getHistory, getPriceHistory, getStores } from '../api/endpoints'
-import type { PricePoint, Store } from '../api/types'
+import { getHistory, getPriceHistory, getStores, getRestockPatterns } from '../api/endpoints'
+import type { PricePoint, Store, RestockPattern } from '../api/types'
 import type { ProductHistory, Episode } from '../lib/history'
-import { formatDuration, episodePhases } from '../lib/history'
+import { formatDuration, episodePhases, findRestockPattern } from '../lib/history'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { ErrorMessage } from '../components/ErrorMessage'
 
@@ -134,7 +134,26 @@ function PriceTimeline({ productId }: { productId: number }) {
   )
 }
 
-function ProductSection({ entry }: { entry: ProductHistory }) {
+function RestockSummary({ pattern }: { pattern: RestockPattern | undefined }) {
+  if (!pattern) return null
+  if (pattern.samples >= 3) {
+    return (
+      <p className="text-sm text-gray-400">
+        🔁 {pattern.summary}
+        <span className="text-gray-600"> ({pattern.samples} restocks)</span>
+      </p>
+    )
+  }
+  return <p className="text-sm text-gray-600">🔁 Not enough restock data yet</p>
+}
+
+function ProductSection({
+  entry,
+  pattern,
+}: {
+  entry: ProductHistory
+  pattern: RestockPattern | undefined
+}) {
   const { product, summary, episodes } = entry
   const [showPrices, setShowPrices] = useState(false)
   const leadPart =
@@ -157,6 +176,7 @@ function ProductSection({ entry }: { entry: ProductHistory }) {
           <span className="text-sm font-semibold text-gray-800">{headerText}</span>
           <span className="ml-2 text-xs text-gray-400">{product.store}</span>
           <p className="text-xs text-gray-500">{statsText}</p>
+          <RestockSummary pattern={pattern} />
         </div>
         <button
           type="button"
@@ -183,6 +203,7 @@ function ProductSection({ entry }: { entry: ProductHistory }) {
 export function HistoryPage() {
   const [history, setHistory] = useState<ProductHistory[]>([])
   const [stores, setStores] = useState<Store[]>([])
+  const [restockPatterns, setRestockPatterns] = useState<RestockPattern[]>([])
   const [selectedStore, setSelectedStore] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -193,6 +214,16 @@ export function HistoryPage() {
       .then(setStores)
       .catch(() => {
         // Non-fatal: dropdown just won't populate
+      })
+  }, [])
+
+  // Fetch restock patterns once; non-fatal if it errors — the summary line
+  // just won't render.
+  useEffect(() => {
+    getRestockPatterns()
+      .then(setRestockPatterns)
+      .catch(() => {
+        // Non-fatal: restock summary just won't show
       })
   }, [])
 
@@ -248,7 +279,11 @@ export function HistoryPage() {
         </div>
       ) : (
         history.map((entry) => (
-          <ProductSection key={entry.product.id} entry={entry} />
+          <ProductSection
+            key={entry.product.id}
+            entry={entry}
+            pattern={findRestockPattern(restockPatterns, entry.product.store)}
+          />
         ))
       )}
     </div>

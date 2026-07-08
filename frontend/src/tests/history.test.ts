@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, episodePhases } from '../lib/history'
+import { formatDuration, episodePhases, findRestockPattern } from '../lib/history'
 
 describe('formatDuration', () => {
   it('handles null, sub-minute, minutes, hours', () => {
@@ -40,5 +40,18 @@ describe('episodePhases', () => {
   it('omits public/oos for an early-only ongoing episode', () => {
     const phases = episodePhases({ ...ep, public_ts: null, ended_ts: null, ongoing: true })
     expect(phases.map((p) => p.icon)).toEqual(['⚡'])
+  })
+})
+
+describe('findRestockPattern', () => {
+  const patterns = [
+    { store: 'ao', summary: 'Usually restocks around 06:00' },
+    { store: 'currys', summary: 'No clear pattern yet' },
+  ]
+  it('returns the pattern matching the given store', () => {
+    expect(findRestockPattern(patterns, 'currys')?.summary).toBe('No clear pattern yet')
+  })
+  it('returns undefined when no pattern matches the store', () => {
+    expect(findRestockPattern(patterns, 'unknown-store')).toBeUndefined()
   })
 })
