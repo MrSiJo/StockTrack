@@ -12,6 +12,7 @@ interface GotifyForm {
   gotify_send_retries: number
   default_interval_seconds: number
   failure_alert_after: number
+  event_retention_days: number
   early_access_days: number
   price_drop_min_pct: number
   price_drop_min_abs: number
@@ -35,6 +36,7 @@ const EMPTY_FORM: GotifyForm = {
   gotify_send_retries: 3,
   default_interval_seconds: 300,
   failure_alert_after: 6,
+  event_retention_days: 0,
   early_access_days: 30,
   price_drop_min_pct: 5,
   price_drop_min_abs: 5,
@@ -74,6 +76,7 @@ export function GotifyPage() {
         gotify_send_retries: settings.gotify_send_retries,
         default_interval_seconds: settings.default_interval_seconds,
         failure_alert_after: settings.failure_alert_after,
+        event_retention_days: settings.event_retention_days,
         early_access_days: settings.early_access_days,
         price_drop_min_pct: settings.price_drop_min_pct,
         price_drop_min_abs: settings.price_drop_min_abs,
@@ -110,6 +113,7 @@ export function GotifyPage() {
         gotify_send_retries: form.gotify_send_retries,
         default_interval_seconds: form.default_interval_seconds,
         failure_alert_after: form.failure_alert_after,
+        event_retention_days: form.event_retention_days,
         early_access_days: form.early_access_days,
         price_drop_min_pct: form.price_drop_min_pct,
         price_drop_min_abs: form.price_drop_min_abs,
@@ -319,6 +323,20 @@ export function GotifyPage() {
                 }
                 className={inputClass}
                 min={1}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>
+                Event retention days (0 = keep forever)
+              </label>
+              <input
+                type="number"
+                value={form.event_retention_days}
+                onChange={(e) =>
+                  set('event_retention_days', Number(e.target.value))
+                }
+                className={inputClass}
+                min={0}
               />
             </div>
             <div>

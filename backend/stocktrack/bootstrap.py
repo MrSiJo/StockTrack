@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     oos_priority: int = 4
     gotify_send_retries: int = 3
     failure_alert_after: int = 6
+    event_retention_days: int = 0
     default_interval_seconds: int = 300
     early_access_days: int = 30
     ao_member: bool = False

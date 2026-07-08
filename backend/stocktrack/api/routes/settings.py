@@ -26,6 +26,7 @@ _PLAIN_SETTING_KEYS = [
     "gotify_send_retries",
     "default_interval_seconds",
     "failure_alert_after",
+    "event_retention_days",
     "early_access_days",
     "price_drop_min_pct",
     "price_drop_min_abs",
@@ -57,6 +58,9 @@ async def _read_settings(session: AsyncSession, secret_key: str) -> SettingsOut:
         ),
         failure_alert_after=int(
             await get(session, "failure_alert_after", "6") or 6
+        ),
+        event_retention_days=int(
+            await get(session, "event_retention_days", "0") or 0
         ),
         early_access_days=int(await get(session, "early_access_days", "30") or 30),
         ao_member=truthy(await get(session, "ao_member", "false")),

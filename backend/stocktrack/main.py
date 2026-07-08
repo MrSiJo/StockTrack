@@ -14,6 +14,7 @@ from stocktrack.seed import seed_default_watches
 from stocktrack.services import gotify
 from stocktrack.services.digest import digest_tick
 from stocktrack.services.poller import check_watch
+from stocktrack.services.retention import retention_tick
 from stocktrack.services.settings_service import get as get_setting, gotify_config, seed_from_env
 
 log = logging.getLogger("stocktrack")
@@ -131,6 +132,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(digest_tick, "interval", minutes=15,
                       args=[sm, env.app_secret_key], kwargs={"tz": env.tz},
                       id="digest", max_instances=1)
+    # Event retention: daily sweep, no-op while event_retention_days is 0.
+    scheduler.add_job(retention_tick, "interval", hours=24,
+                      args=[sm], id="retention", max_instances=1)
     scheduler.start()
 
     app.state.engine = engine
