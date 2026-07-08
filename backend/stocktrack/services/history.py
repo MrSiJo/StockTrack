@@ -123,3 +123,35 @@ def build_history(products_events, now: datetime, store: "str | None" = None) ->
                 for e in eps],
         })
     return out
+
+
+# Kinds that represent a transition *into* availability. Real Event rows use
+# "early_access" (see poller.py) rather than "early", but the pattern is kept
+# permissive — the spec calls it "early" and a bare "restock" kind isn't
+# currently emitted anywhere either, so both spellings are accepted to avoid
+# silently dropping real early-access restocks.
+_RESTOCK_KINDS = {"public", "early", "early_access", "restock"}
+
+
+def restock_pattern(events, now=None) -> dict:
+    """Aggregate restock (into-availability) events by hour and weekday."""
+    by_hour = [0] * 24
+    by_weekday = [0] * 7
+    samples = 0
+    for e in events:
+        if e.kind not in _RESTOCK_KINDS:
+            continue
+        ts = e.ts
+        by_hour[ts.hour] += 1
+        by_weekday[ts.weekday()] += 1
+        samples += 1
+    if samples < 3:
+        return {"samples": samples, "by_hour": by_hour,
+                "by_weekday": by_weekday, "summary": "Not enough data yet"}
+    peak_hour = max(range(24), key=lambda h: by_hour[h])
+    weekday_hits = sum(by_weekday[:5])
+    when = "weekday mornings" if weekday_hits >= samples / 2 and peak_hour < 12 else \
+           ("weekdays" if weekday_hits >= samples / 2 else "any day")
+    summary = f"Usually restocks around {peak_hour:02d}:00, {when}"
+    return {"samples": samples, "by_hour": by_hour,
+            "by_weekday": by_weekday, "summary": summary}

@@ -251,3 +251,15 @@ class ProductHistoryOut(BaseModel):
     product: ProductRefOut
     summary: HistorySummaryOut
     episodes: list[EpisodeOut]
+
+
+# ── Restock patterns ─────────────────────────────────────────────────────────
+
+class RestockPatternOut(BaseModel):
+    watch_id: int
+    store: str
+    label: str
+    samples: int
+    by_hour: list[int]
+    by_weekday: list[int]
+    summary: str
