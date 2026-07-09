@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from statistics import mean, median
+from datetime import datetime, timedelta, timezone
+from statistics import mean, median, quantiles
 from typing import Iterable, Optional
+from zoneinfo import ZoneInfo
 
 
 @dataclass
@@ -133,25 +134,59 @@ def build_history(products_events, now: datetime, store: "str | None" = None) ->
 _RESTOCK_KINDS = {"public", "early", "early_access", "restock"}
 
 
-def restock_pattern(events, now=None) -> dict:
-    """Aggregate restock (into-availability) events by hour and weekday."""
+def _hhmm(minutes: int) -> str:
+    minutes = int(round(minutes)) % (24 * 60)
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def restock_pattern(events, tz: str = "Europe/London", now=None) -> dict:
+    """Aggregate restock (into-availability) events into a local-time pattern.
+
+    Timestamps are converted to ``tz`` (DST-aware via zoneinfo) before bucketing,
+    then summarised as a centre time (median) plus a typical interquartile band.
+    """
+    zone = ZoneInfo(tz)
     by_hour = [0] * 24
     by_weekday = [0] * 7
-    samples = 0
+    minutes: list[int] = []
     for e in events:
         if e.kind not in _RESTOCK_KINDS:
             continue
         ts = e.ts
-        by_hour[ts.hour] += 1
-        by_weekday[ts.weekday()] += 1
-        samples += 1
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        local = ts.astimezone(zone)
+        by_hour[local.hour] += 1
+        by_weekday[local.weekday()] += 1
+        minutes.append(local.hour * 60 + local.minute)
+
+    samples = len(minutes)
+    base = {"samples": samples, "by_hour": by_hour, "by_weekday": by_weekday}
     if samples < 3:
-        return {"samples": samples, "by_hour": by_hour,
-                "by_weekday": by_weekday, "summary": "Not enough data yet"}
-    peak_hour = max(range(24), key=lambda h: by_hour[h])
+        return {**base, "summary": "Not enough data yet"}
+
+    centre = median(minutes)
+    if samples >= 4:
+        q1, _, q3 = quantiles(minutes, n=4)
+        lo, hi = q1, q3
+    else:  # n == 3: quartiles are noisy; use the honest full span
+        lo, hi = min(minutes), max(minutes)
+    band = hi - lo
+
     weekday_hits = sum(by_weekday[:5])
-    when = "weekday mornings" if weekday_hits >= samples / 2 and peak_hour < 12 else \
-           ("weekdays" if weekday_hits >= samples / 2 else "any day")
-    summary = f"Usually restocks around {peak_hour:02d}:00, {when}"
-    return {"samples": samples, "by_hour": by_hour,
-            "by_weekday": by_weekday, "summary": summary}
+    if weekday_hits >= samples / 2:
+        when = "weekday mornings" if centre < 720 else "weekdays"
+    else:
+        when = "any day"
+
+    if band > 90:
+        summary = f"Restock time varies: mostly {_hhmm(lo)}–{_hhmm(hi)} · {when}"
+    elif band <= 20:
+        summary = f"Usually restocks around {_hhmm(centre)} · {when}"
+    else:
+        summary = (f"Usually restocks around {_hhmm(centre)}, "
+                   f"typically {_hhmm(lo)}–{_hhmm(hi)} · {when}")
+    if samples < 5:
+        summary += f" (only {samples} seen)"
+
+    return {**base, "summary": summary}

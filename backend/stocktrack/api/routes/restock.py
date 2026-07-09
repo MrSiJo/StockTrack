@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from stocktrack.api.deps import get_session
 from stocktrack.api.schemas import RestockPatternOut
+from stocktrack.bootstrap import get_settings
 from stocktrack.models import Event, Product, Watch
 from stocktrack.services.history import restock_pattern
 
@@ -24,7 +25,7 @@ async def get_restock_patterns(session: AsyncSession = Depends(get_session)):
             events_by_watch.setdefault(wid, []).append(e)
     out = []
     for w in watches:
-        pat = restock_pattern(events_by_watch.get(w.id, []))
+        pat = restock_pattern(events_by_watch.get(w.id, []), tz=get_settings().tz)
         out.append(RestockPatternOut(
             watch_id=w.id, store=w.store, label=w.label, **pat))
     return out
