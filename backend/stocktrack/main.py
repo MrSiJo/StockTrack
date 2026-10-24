@@ -175,6 +175,7 @@ def create_app() -> FastAPI:
     from stocktrack.api.rate_limit import limiter
     from stocktrack.api.routes.auth import router as auth_router
     from stocktrack.api.routes.setup import router as setup_router
+    from stocktrack.api.routes.tokens import router as tokens_router
     from stocktrack.api.routes.events import router as events_router
     from stocktrack.api.routes.history import router as history_router
     from stocktrack.api.routes.offers import router as offers_router
@@ -220,5 +221,6 @@ def create_app() -> FastAPI:
     app.include_router(offers_router, prefix="/api")
     app.include_router(watches_router, prefix="/api")
     app.include_router(settings_router, prefix="/api")
+    app.include_router(tokens_router, prefix="/api")
 
     return app
