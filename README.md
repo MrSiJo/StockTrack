@@ -31,7 +31,7 @@ docker compose up -d --build
 ```
 
 The UI is available at `http://localhost:${FRONTEND_PORT:-9181}`. Add watches
-via the **Watches** tab. Full walkthrough in [docs/setup.md](docs/setup.md).
+via the **Watches** tab (the first visit asks you to create your account, so do that straight away; set `COOKIE_SECURE=false` in `.env` if you serve over plain HTTP). Full walkthrough in [docs/setup.md](docs/setup.md).
 
 ## Documentation
 
@@ -44,10 +44,12 @@ via the **Watches** tab. Full walkthrough in [docs/setup.md](docs/setup.md).
 
 ## Security
 
-- The Gotify token is encrypted at rest using Fernet, keyed by `APP_SECRET_KEY`.
+- The Gotify token is encrypted at rest using Fernet, keyed by `APP_SECRET_KEY`. Passwords are hashed with argon2id and API tokens are stored only as hashes.
 - No secrets in the repository — only `.env.example` with blank placeholders.
 - Pre-commit hooks: **gitleaks**, **bandit**, **ruff**, and a custom hook that forbids LAN IP literals from being committed.
-- There is no built-in authentication — StockTrack is designed for single-operator, trusted-LAN use behind your own reverse proxy.
+- Sign in is built in: the first visit creates the single user (do this straight after installing), sessions use signed `HttpOnly` cookies with CSRF protection, and HTTPS is expected (a plain HTTP install must set `COOKIE_SECURE=false`).
+- Other services can read a short allowlist of `GET` endpoints with read only API tokens (Settings > API tokens). See [deployment](docs/deployment.md#authentication).
+- `APP_SECRET_KEY` also signs sessions: rotating it signs everyone out and invalidates the stored Gotify token.
 
 ## License
 

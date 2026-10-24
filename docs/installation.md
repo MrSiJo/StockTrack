@@ -12,7 +12,8 @@ Getting StockTrack onto a machine. For building images and local dev see
 - Docker with Compose v2 (`docker compose`, not the legacy `docker-compose`).
 - A [Gotify](https://gotify.net/) server, if you want push notifications
   (optional — StockTrack runs without it and just records transitions).
-- A reverse proxy if you want TLS. LAN-only by intent.
+- A reverse proxy with TLS. StockTrack signs you in with a `Secure` cookie, so
+  HTTPS is expected (a plain HTTP install must set `COOKIE_SECURE=false`).
 
 **To develop / build from source:** additionally Python 3.12 and Node 22 —
 see [build](./build.md).
@@ -37,7 +38,9 @@ openssl rand -hex 32
 
 `APP_SECRET_KEY` is **required** and validated at startup — the app refuses to
 start if it is shorter than 32 characters. It encrypts the Gotify token at
-rest, so keep it stable: changing it invalidates the stored token.
+rest and signs login sessions, so keep it stable: changing it signs everyone
+out and invalidates the stored token (see
+[deployment](./deployment.md#the-secret-key-and-rotation)).
 
 > Never commit real values. `.env` is git-ignored; only `.env.example` (blank
 > placeholders) is tracked. A pre-commit hook also blocks RFC1918 LAN IP
@@ -47,7 +50,9 @@ rest, so keep it stable: changing it invalidates the stored token.
 
 | Name | Required | Default | Notes |
 | --- | --- | --- | --- |
-| `APP_SECRET_KEY` | yes | — | 32+ chars (`openssl rand -hex 32`). Encrypts the Gotify token at rest. |
+| `APP_SECRET_KEY` | yes | — | 32+ chars (`openssl rand -hex 32`). Encrypts the Gotify token at rest and signs login sessions. |
+| `COOKIE_SECURE` | no | `true` | Marks the session and CSRF cookies `Secure`. HTTPS is expected; set `false` for a plain HTTP install. |
+| `SESSION_MAX_AGE_SECONDS` | no | `604800` | How long a sign in lasts (7 days). |
 | `DATABASE_URL` | no | `sqlite+aiosqlite:////data/stocktrack.db` | Async SQLite URL. |
 | `DATA_DIR` | no | `/data` | Data directory inside the container. |
 | `FRONTEND_PORT` | no | `9181` | Host port mapped to the UI container's `:80`. |
@@ -79,4 +84,5 @@ boot; after that, edit them in the UI (Gotify / Watches settings). See
 ## Next step
 
 Once `.env` is in place, continue to [deployment](./deployment.md) to build and
-run, then [setup](./setup.md) to add watches and configure alerts.
+run, then [setup](./setup.md) to create your account straight away, add watches
+and configure alerts.

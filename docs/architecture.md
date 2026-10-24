@@ -51,6 +51,8 @@ dev server on `:5173`).
   (see [plugins.md](./plugins.md)).
   Each maps a store's listing HTML/JSON to the shared `Product` dataclass. See
   [adding-a-store](./adding-a-store.md) for the handler contract and a checklist.
+* **Auth**: a single user, session cookies, CSRF protection and read only API
+  tokens (see [Authentication](#authentication)).
 - **Notifications** — a delivery-safe Gotify sender (`services/gotify.py`).
 - **History** — pure episode reconstruction over the event log
   (`services/history.py`), exposed read-only at `GET /api/history`.
@@ -142,6 +144,11 @@ SQLAlchemy models in `backend/stocktrack/models/`:
   changing between polls (`field`, `old`, `new`, `ts`). Nothing here is
   pushed, so it sits outside the delivery safe rules; it feeds the offers
   change summary and the digest. Pruned with `event_retention_days`.
+* **User**: the single account: `username` and an argon2id `password_hash`.
+  Created once by `/api/setup`.
+* **ApiToken**: one row per API token: unique `name`, `token_hash` (the SHA-256
+  of the token, never the token), `created_at`, optional `expires_at`,
+  `last_used_at` and `revoked_at`.
 - **Setting** — a key/value store for runtime config. Secret values (the
   Gotify token) are stored Fernet-encrypted; `is_secret` flags them.
 
@@ -151,9 +158,48 @@ Settings live in two layers. Environment variables (`bootstrap.py`,
 pydantic-settings) provide boot defaults; `seed_from_env` copies them into the
 `setting` table on first boot **only if not already set**, after which the UI
 is the source of truth. The Gotify token is encrypted at rest with Fernet,
-keyed by `APP_SECRET_KEY` (`crypto.py`) — so `APP_SECRET_KEY` must stay stable;
-changing it invalidates the stored token. See [installation](./installation.md)
+keyed by `APP_SECRET_KEY` (`crypto.py`). The same key signs session cookies, so
+`APP_SECRET_KEY` must stay stable: changing it signs everyone out and
+invalidates the stored token. See [installation](./installation.md)
 for the variable reference.
+
+## Authentication
+
+Two middlewares guard every request. Starlette runs the one added last first, so
+the order is: CORS (dev only, answers preflights), then **auth**, then **CSRF**,
+then the route.
+
+* **Auth** (`api/auth_middleware.py`). A request is allowed if it targets an
+  exempt path (`/api/health`, `/api/health/plugins`, `/api/setup`,
+  `/api/auth/login`), or carries a valid session, or carries a valid API token
+  for an allowlisted `GET`. Anything else gets `401`. A valid token on any other
+  endpoint gets `403`.
+* **Session.** On sign in the backend sets the `stocktrack_session` cookie
+  (`HttpOnly`, `SameSite=Strict`, `Secure` unless `COOKIE_SECURE=false`),
+  holding `{"user_id": ...}` signed with `APP_SECRET_KEY` by itsdangerous. The
+  signature is checked with a maximum age of `SESSION_MAX_AGE_SECONDS`, so
+  expiry is enforced server side.
+* **User exists check.** A valid signature is not enough: the middleware also
+  confirms the user row still exists (an indexed lookup, remembered for 30
+  seconds). Deleting the user ends their sessions without rotating the key.
+* **API tokens** (`services/token_service.py`). `st_` plus 32 random bytes. Only
+  the SHA-256 hash is stored, and a presented token is compared in constant time
+  against every active (unrevoked, unexpired) hash. A plain hash is enough
+  because the token is high entropy, unlike a password; passwords use argon2id.
+  The exempt paths and the token allowlist are pinned by a test, so widening
+  either is a deliberate change.
+* **CSRF** (`api/csrf.py`), double submit. A random token is set in the
+  `stocktrack_csrf` cookie, readable by the SPA, on safe responses. `POST`,
+  `PUT`, `PATCH` and `DELETE` must echo it in the `X-CSRF-Token` header, compared
+  in constant time, or they get `403`. Only the two health paths are exempt, so
+  `/api/setup` and `/api/auth/login` are protected. Token requests are `GET`
+  only, so CSRF never applies to them.
+* **Where state lives.** The `user` and `api_token` tables are in the same SQLite
+  database as everything else. Sessions are stateless signed cookies and are not
+  stored.
+* **Login hardening.** Sign in is rate limited per client address and locks a
+  username after repeated failures. That state is in process, which is fine
+  because the API runs one worker.
 
 ## The fetch layer (Cloudflare resilience)
 
@@ -171,7 +217,8 @@ This is why `curl_cffi>=0.7` is a hard dependency, not optional.
 | Database | `/data/stocktrack.db` (named volume `stocktrack-data`) |
 | Compiled SPA | `/usr/share/nginx/html` (ui container) |
 | API | `stocktrack-api:9180` (proxied as `/api`) |
-| Health check | `GET /api/health` |
+| Health check | `GET /api/health` (no sign in needed) |
+| Users and API tokens | `user` and `api_token` tables in the same database |
 
 `/data` is the only directory that must persist — it is the mounted data
 volume (see [deployment](./deployment.md)).

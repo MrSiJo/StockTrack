@@ -1,7 +1,64 @@
 # First-run setup & configuration
 
 Once the stack is running (see [deployment](./deployment.md)), open
-`http://<host>:${FRONTEND_PORT:-9181}` and add watches, then configure Gotify.
+`http://<host>:${FRONTEND_PORT:-9181}`, create your account, add watches, then
+configure Gotify.
+
+## Create your account (first run)
+
+StockTrack has a single user. On a fresh database the first visit shows the
+**Setup** page instead of the sign in page:
+
+1. Choose a username (up to 64 characters) and a password. The password must be
+   at least 12 characters. There are no other composition rules, so a long
+   passphrase is fine.
+2. Submit. Setup creates the one and only user and then refuses to run again (a
+   second attempt gets `409`). It does not sign you in, so the app then takes
+   you to the sign in page.
+
+> **Complete setup straight after installing.** Until the user exists, anyone who
+> can reach the instance can complete setup and own it. Do not leave a new,
+> unconfigured install exposed.
+
+There is no password reset screen and no way to add a second user. If you lose
+the password, stop the containers and delete the row from the `user` table in
+`stocktrack.db`; the next visit shows Setup again.
+
+## Sign in and sign out
+
+Sign in with the username and password you chose. Sign in is rate limited (5
+attempts a minute per client address), and 10 failed attempts for one username
+within 15 minutes lock that username for 15 minutes.
+
+* **Session length:** a session lasts `SESSION_MAX_AGE_SECONDS` (default
+  `604800`, which is 7 days) from sign in. The server enforces the limit as well
+  as the browser, so an old cookie stops working when it expires. After that you
+  sign in again.
+* **Sign out:** use **Sign out** in the header. It clears the session cookie in
+  your browser.
+* **HTTP installs:** the session cookie is `Secure` by default, so a browser
+  will not keep it over plain HTTP. If you sign in and are sent straight back to
+  the sign in page, set `COOKIE_SECURE=false` (the page tells you this). See
+  [deployment](./deployment.md#https-and-cookie_secure).
+
+## API tokens
+
+Other services (a dashboard, a script) can read some data with an API token
+instead of a session. Create them under **Settings > API tokens**:
+
+1. Give the token a name (it must be unique) and optionally an expiry in whole
+   days. Leave the expiry empty for a token that never expires.
+2. Copy the token when it is shown. **It is displayed once and cannot be shown
+   again**; StockTrack stores only a hash of it. If you lose it, revoke it and
+   create another.
+3. The list shows each token's name, state (active, expired or revoked), expiry
+   and when it was last used (updated at most once a minute).
+4. **Revoke** a token to stop it working immediately. Revoking asks for a second
+   click to confirm.
+
+Tokens are read only and limited to a short list of endpoints. See
+[deployment](./deployment.md#api-tokens-for-other-services) for the allowlist,
+a `curl` example and proxy notes.
 
 ## Add a watch (Watches tab)
 
