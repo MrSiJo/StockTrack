@@ -31,3 +31,4 @@ docs/superpowers/
 
 # Claude Code session / agent worktree data
 .claude/
+CLAUDE.local.md

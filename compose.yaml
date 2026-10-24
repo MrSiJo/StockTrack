@@ -1,5 +1,8 @@
 services:
   stocktrack-api:
+    labels:
+      - wud.watch=false
+      - com.centurylinklabs.watchtower.enable=false
     build: ./backend
     env_file: .env
     volumes:
@@ -19,6 +22,9 @@ services:
     restart: unless-stopped
 
   stocktrack-ui:
+    labels:
+      - wud.watch=false
+      - com.centurylinklabs.watchtower.enable=false
     build: ./frontend
     ports:
       - "${FRONTEND_PORT:-9181}:80"
