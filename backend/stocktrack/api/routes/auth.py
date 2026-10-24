@@ -45,9 +45,13 @@ async def login(
             headers={"Retry-After": str(locked_for)},
         )
 
+    # Count the attempt as a failure BEFORE the (threaded, slow) argon2
+    # check and clear it on success. Recording only after authenticate let
+    # parallel attempts all pass the lock check above before any of them
+    # was counted. No await between the check and this line.
+    login_throttle.record_failure(body.username)
     user = await authenticate(session, body.username, body.password)
     if user is None:
-        login_throttle.record_failure(body.username)
         raise HTTPException(status_code=401, detail="invalid credentials")
 
     login_throttle.reset(body.username)

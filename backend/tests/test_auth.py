@@ -282,3 +282,39 @@ async def test_logout_ends_every_session_for_the_user(sessionmaker_, app):
         assert (await b.get("/api/auth/me")).status_code == 401
         assert (await _login(b)).status_code == 200  # signing in again works
         assert (await b.get("/api/auth/me")).status_code == 200
+
+
+async def test_concurrent_wrong_logins_still_lock_at_the_limit(
+        anon_client, sessionmaker_, monkeypatch):
+    """argon2 runs in a thread, so parallel attempts overlap: each failure
+    must be counted before authenticate awaits, or all of them pass the lock
+    check first."""
+    import asyncio
+    from stocktrack.api.rate_limit import limiter
+    await _make_user(sessionmaker_)
+    monkeypatch.setattr(login_throttle, "max_failures", 3)
+    monkeypatch.setattr(limiter, "enabled", False)  # isolate the username lock
+    await anon_client.get("/api/setup")  # primes the CSRF cookie
+    headers = csrf_headers(anon_client)
+
+    async def attempt():
+        r = await anon_client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "wrong-wrong-pass"}, headers=headers)
+        return r.status_code
+
+    codes = await asyncio.gather(*(attempt() for _ in range(8)))
+    assert sorted(codes) == [401] * 3 + [429] * 5
+
+
+async def test_success_clears_the_failures_counted_up_front(anon_client, sessionmaker_,
+                                                            monkeypatch):
+    await _make_user(sessionmaker_)
+    monkeypatch.setattr(login_throttle, "max_failures", 3)
+    for _ in range(2):
+        assert (await _login(anon_client, password="wrong-wrong-pass")).status_code == 401
+    # The third attempt reaches the limit as it is counted, but it is right:
+    # it signs in and clears the count.
+    assert (await _login(anon_client)).status_code == 200
+    assert login_throttle.seconds_until_unlocked("admin") == 0
+    assert (await _login(anon_client, password="wrong-wrong-pass")).status_code == 401
