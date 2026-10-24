@@ -22,11 +22,15 @@ export interface Product {
   last_checked: string | null
   spec_watts?: number | null
   price_per_watt?: number | null
-  // Offer listings (plugin API 2); "" / null on ordinary watches. The audience
-  // prices are null when the seller's discounts are unknown.
+  // Offer listings (plugin API 2 and 3); "" / null on ordinary watches. A
+  // price is null when it cannot be known: list_price when the quoted price
+  // had an unknown discount taken off, an audience price when the discounts
+  // that apply to it are unknown.
   variant?: string
   seller?: string
   seller_rating?: number | null
+  price_audience?: string
+  list_price?: number | null
   price_new_customer?: number | null
   price_returning_customer?: number | null
 }

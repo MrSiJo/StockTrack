@@ -7,9 +7,11 @@ import {
   toggleVariant,
 } from '../lib/offers'
 
-function formatOfferPrice(price: number | null | undefined): string {
-  if (price == null) return '?'
-  return `£${price.toFixed(2)}`
+const UNKNOWN_TIP = "The seller's discounts could not be read: check at checkout"
+
+function OfferPrice({ price }: { price: number | null | undefined }) {
+  if (price == null) return <span title={UNKNOWN_TIP}>?</span>
+  return <>£{price.toFixed(2)}</>
 }
 
 const TH =
@@ -72,12 +74,14 @@ export function OfferTable({
           <tr className="bg-white">
             <th className={`${TH} pl-4`}>Seller</th>
             <th className={TH}>Rating</th>
-            <th className={TH}>List</th>
-            <th className={TH} title="List price less the best new customer discount">
+            <th className={TH} title="What a new customer pays, best first order discount taken off">
               New
             </th>
-            <th className={TH} title="List price less the best returning customer discount">
+            <th className={TH} title="What a returning customer pays, best returning discount taken off">
               Returning
+            </th>
+            <th className={`${TH} text-gray-400`} title="The seller's price before any discount">
+              List
             </th>
           </tr>
         </thead>
@@ -108,7 +112,7 @@ export function OfferTable({
         </tbody>
       </table>
       <p className="px-4 py-2 text-xs text-gray-400">
-        ? means the seller's discounts could not be read.
+        Sorted by the new customer price. ? means it depends on discounts that could not be read; check at checkout.
       </p>
     </div>
   )
@@ -161,14 +165,14 @@ function VariantBlock({
           <td className="px-3 py-2 tabular-nums text-sm text-gray-600">
             {p.seller_rating != null ? p.seller_rating.toFixed(1) : '—'}
           </td>
-          <td className="px-3 py-2 tabular-nums text-sm text-gray-700">
-            {formatOfferPrice(p.current_price)}
+          <td className="px-3 py-2 tabular-nums text-sm text-gray-900">
+            <OfferPrice price={p.price_new_customer} />
           </td>
           <td className="px-3 py-2 tabular-nums text-sm text-gray-700">
-            {formatOfferPrice(p.price_new_customer)}
+            <OfferPrice price={p.price_returning_customer} />
           </td>
-          <td className="px-3 py-2 tabular-nums text-sm text-gray-700">
-            {formatOfferPrice(p.price_returning_customer)}
+          <td className="px-3 py-2 tabular-nums text-sm text-gray-400">
+            <OfferPrice price={p.list_price === undefined ? p.current_price : p.list_price} />
           </td>
         </tr>
       ))}
