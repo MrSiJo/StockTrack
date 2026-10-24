@@ -192,18 +192,21 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-    # Order matters: the middleware added LAST runs FIRST. CORS (dev only)
-    # answers preflights before auth; auth gates before CSRF.
+    # Order matters: the middleware added LAST runs FIRST. CORS (only when
+    # CORS_DEV_ORIGINS is set) answers preflights before auth; auth gates
+    # before CSRF.
     app.add_middleware(CsrfMiddleware, cookie_secure=settings.cookie_secure)
     app.add_middleware(AuthMiddleware, secret_key=settings.app_secret_key,
                        max_age_seconds=settings.session_max_age_seconds)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    cors_origins = settings.cors_dev_origin_list()
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     @app.get("/api/health")
     async def health():

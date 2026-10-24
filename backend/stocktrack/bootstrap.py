@@ -45,6 +45,14 @@ class Settings(BaseSettings):
     # browser drops the session cookie.
     cookie_secure: bool = True
     session_max_age_seconds: int = 7 * 24 * 3600
+    # Comma separated browser origins allowed cross origin with credentials,
+    # for a dev UI served from another origin. Empty (the default): no CORS
+    # at all. Production needs none (nginx serves the SPA and /api on one
+    # origin) and neither does `npm run dev` (Vite proxies /api).
+    cors_dev_origins: str = ""
+
+    def cors_dev_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_dev_origins.split(",") if o.strip()]
 
     @field_validator("app_secret_key")
     @classmethod
