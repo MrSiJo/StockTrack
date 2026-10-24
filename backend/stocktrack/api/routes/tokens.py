@@ -27,7 +27,7 @@ async def post_token(body: ApiTokenCreate, session: AsyncSession = Depends(get_s
         row, token = await create_token(session, body.name, body.expires_in_days)
     except DuplicateTokenName as exc:
         raise HTTPException(status_code=409,
-                            detail="a token with this name already exists") from exc
+                            detail="an active token with this name already exists") from exc
     # The only response that ever carries the token itself.
     return ApiTokenCreated(**ApiTokenOut.model_validate(row).model_dump(), token=token)
 

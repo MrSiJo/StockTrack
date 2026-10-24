@@ -68,6 +68,35 @@ async def test_duplicate_name_is_409(client):
     assert r.status_code == 409
 
 
+async def test_a_revoked_tokens_name_can_be_reused(client):
+    old = await _create(client, "x")
+    assert (await client.post(f"/api/tokens/{old['id']}/revoke")).status_code == 200
+    new = await _create(client, "x")
+    assert new["id"] != old["id"]
+    # Two active tokens named x are still refused.
+    r = await client.post("/api/tokens", json={"name": "x", "expires_in_days": None})
+    assert r.status_code == 409
+    names = [(t["name"], t["revoked_at"] is None) for t in
+             (await client.get("/api/tokens")).json()]
+    assert sorted(names) == [("x", False), ("x", True)]
+
+
+async def test_two_active_tokens_cannot_share_a_name_even_in_the_db(sessionmaker_):
+    """Backstop for a race past the service check: a partial unique index."""
+    from sqlalchemy.exc import IntegrityError
+    async with sessionmaker_() as s:
+        s.add_all([ApiToken(name="x", token_hash="a" * 64),
+                   ApiToken(name="x", token_hash="b" * 64)])
+        with pytest.raises(IntegrityError):
+            await s.commit()
+    async with sessionmaker_() as s:
+        now = datetime.now(timezone.utc)
+        s.add_all([ApiToken(name="y", token_hash="c" * 64, revoked_at=now),
+                   ApiToken(name="y", token_hash="d" * 64, revoked_at=now),
+                   ApiToken(name="y", token_hash="e" * 64)])
+        await s.commit()  # revoked rows never conflict
+
+
 @pytest.mark.parametrize("body", [
     {"name": "", "expires_in_days": None},
     {"name": "x" * 65, "expires_in_days": None},

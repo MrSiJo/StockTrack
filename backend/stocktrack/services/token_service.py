@@ -23,7 +23,7 @@ LAST_USED_RESOLUTION = timedelta(minutes=1)
 
 
 class DuplicateTokenName(ValueError):
-    """Raised when a token with this name already exists."""
+    """Raised when an unrevoked token with this name already exists."""
 
 
 def generate_token() -> str:
@@ -36,7 +36,17 @@ def hash_token(token: str) -> str:
 
 async def create_token(session: AsyncSession, name: str,
                        expires_in_days: int | None) -> tuple[ApiToken, str]:
-    """Create a token; returns the row and the token, which is never stored."""
+    """Create a token; returns the row and the token, which is never stored.
+
+    The name must be unique among unrevoked tokens; a revoked one's name is
+    free again.
+    """
+    taken = (await session.execute(
+        select(ApiToken.id).where(ApiToken.name == name,
+                                  ApiToken.revoked_at.is_(None)).limit(1)
+    )).scalar_one_or_none()
+    if taken is not None:
+        raise DuplicateTokenName(name)
     token = generate_token()
     now = datetime.now(timezone.utc)
     row = ApiToken(
@@ -49,6 +59,7 @@ async def create_token(session: AsyncSession, name: str,
     try:
         await session.commit()
     except IntegrityError as exc:
+        # Lost a race with a concurrent create of the same name.
         await session.rollback()
         raise DuplicateTokenName(name) from exc
     return row, token
