@@ -39,13 +39,15 @@ def _phase(p) -> str:
 
 
 def _offer_price_line(o: dict) -> str:
-    parts = [f"{o['seller'] or o['title'] or o['code']} {fmt_price(o['price'])}"]
-    if o["price_new_customer"] is not None and o["price_new_customer"] != o["price"]:
-        parts.append(f"new {fmt_price(o['price_new_customer'])}")
-    if (o["price_returning_customer"] is not None
-            and o["price_returning_customer"] != o["price"]):
-        parts.append(f"returning {fmt_price(o['price_returning_customer'])}")
-    return ", ".join(parts)
+    name = o["seller"] or o["title"] or o["code"]
+    known = [(label, o[key]) for label, key in (
+        ("new", "price_new_customer"), ("returning", "price_returning_customer"),
+        ("list", "list_price")) if o[key] is not None]
+    if not known:
+        return f"{name} {fmt_price(o['price'])}"
+    if len({v for _, v in known}) == 1 and len(known) == 3:
+        return f"{name} {fmt_price(known[0][1])}"
+    return f"{name} " + ", ".join(f"{label} {fmt_price(v)}" for label, v in known)
 
 
 def _offer_blocks(watch, prods, summaries) -> list[str]:

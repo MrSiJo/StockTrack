@@ -66,6 +66,11 @@ class Product:
     seller_rating: Optional[float] = None
     discounts: Optional[list[Discount]] = None
     extra: dict[str, str] = field(default_factory=dict)
+    # Plugin API 3: who ``price`` is quoted for, one of DISCOUNT_AUDIENCES.
+    # "any" is the list price before any discount. An audience means the
+    # seller's discount for that audience is already taken off; core adds the
+    # known discount back to find the list price.
+    price_audience: str = "any"
 
 class SiteHandler:
     name = "base"

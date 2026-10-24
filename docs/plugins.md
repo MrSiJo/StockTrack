@@ -5,7 +5,7 @@ The built in ones live in `backend/stocktrack/sites/`. You can add your own, or
 replace a built in one, without rebuilding the image, by pointing
 `STOCKTRACK_PLUGINS_DIR` at a folder of plugin modules.
 
-## The contract (plugin API 2)
+## The contract (plugin API 3)
 
 A plugin module defines:
 
@@ -109,17 +109,25 @@ Product(
 * `discounts=None` means unknown and `[]` means the seller lists none. Keep them
   apart: an unknown discount must never read as "no discount".
 * All the fields are optional, so a plugin written for API 1 still loads.
+* API 3 adds `price_audience` (default `any`). Some pages quote each seller's
+  price with a voucher already taken off. Say so with
+  `price_audience="new_customer"` (or `returning_customer`) instead of guessing
+  the list price: core adds the known discount for that audience back to find
+  it. A plugin that sets it declares `PLUGIN_API = 3`.
 
 What core does with them:
 
 * Stores them on the product, and records a silent `ProductChange` row whenever
   a price or the discounts change between polls.
 * `GET /api/watches/{id}/offers?variant=&min_rating=` returns the available
-  products grouped by variant (in first seen order), each group sorted by list
-  price. Each offer carries `price`, `price_new_customer` and
-  `price_returning_customer`: the list price less the single best discount for
-  that audience (or `any`), never below zero, and `null` when the discounts are
-  unknown.
+  products grouped by variant (in first seen order), each group sorted by what
+  a new customer pays (the quoted price when that is unknown). Each offer
+  carries the quoted `price` and its `price_audience`, `list_price`,
+  `price_new_customer` and `price_returning_customer`: the list price less the
+  single best discount for that audience (or `any`), never below zero. A price
+  quoted for an audience is that audience's price as is; any figure that
+  depends on unknown discounts is `null`, so an unknown never reads as a
+  price.
 * `GET /api/watches/{id}/offer-changes?days=14` summarises, per variant, how
   many price changes there were, across how many offers, the largest and mean
   change, and how many discount changes, plus the change list itself.

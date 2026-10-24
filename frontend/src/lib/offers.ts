@@ -14,14 +14,20 @@ export function hasVariants(products: Product[]): boolean {
   return products.some((p) => !!p.variant)
 }
 
-function byListPrice(a: Product, b: Product): number {
-  const pa = a.current_price ?? Infinity
-  const pb = b.current_price ?? Infinity
+// What a new customer pays, else the quoted price: always a known figure when
+// the seller quotes one, so unknown discounts never jump the queue.
+function startPrice(p: Product): number {
+  return p.price_new_customer ?? p.current_price ?? Infinity
+}
+
+function byStartPrice(a: Product, b: Product): number {
+  const pa = startPrice(a)
+  const pb = startPrice(b)
   if (pa !== pb) return pa - pb
   return (a.seller ?? '').localeCompare(b.seller ?? '')
 }
 
-// Variants in first seen order, each group cheapest first.
+// Variants in first seen order, each group cheapest to start with first.
 export function groupByVariant(products: Product[]): VariantGroup[] {
   const groups = new Map<string, Product[]>()
   for (const p of products) {
@@ -31,7 +37,7 @@ export function groupByVariant(products: Product[]): VariantGroup[] {
   }
   return [...groups.entries()].map(([variant, ps]) => ({
     variant,
-    products: [...ps].sort(byListPrice),
+    products: [...ps].sort(byStartPrice),
   }))
 }
 

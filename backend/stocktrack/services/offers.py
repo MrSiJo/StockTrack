@@ -121,6 +121,8 @@ async def apply_offer_fields(session, row: Product, p, now, *, old_price=None,
     row.seller = str(getattr(p, "seller", "") or "")
     row.seller_rating = _num(getattr(p, "seller_rating", None))
     row.discounts_json = new_discounts
+    audience = getattr(p, "price_audience", "any")
+    row.price_audience = audience if audience in DISCOUNT_AUDIENCES else "any"
     extra = getattr(p, "extra", None)
     row.extra_json = json.dumps({str(k): str(v) for k, v in extra.items()},
                                 sort_keys=True) if isinstance(extra, dict) and extra else ""
@@ -135,42 +137,79 @@ def _saving(price: float, d: dict) -> float:
     return 0.0
 
 
+def list_price(price: Optional[float], discounts: Optional[list[dict]],
+               price_audience: str = "any") -> Optional[float]:
+    """The price before any discount.
+
+    A price quoted for an audience has that audience's discount (or an "any"
+    one) already taken off: add it back. None when that discount is unknown
+    or cannot be told apart from another one.
+    """
+    if price is None or price_audience == "any":
+        return price
+    if discounts is None:
+        return None
+    taken = [d for d in discounts if d.get("audience", "any") in (price_audience, "any")]
+    if not taken:
+        return price
+    if len(taken) > 1:
+        return None
+    amount, percent = _num(taken[0].get("amount")), _num(taken[0].get("percent"))
+    if amount is not None:
+        return round(price + amount, 2)
+    if percent is not None and 0 < percent < 100:
+        return round(price / (1 - percent / 100.0), 2)
+    return None
+
+
 def audience_price(price: Optional[float], discounts: Optional[list[dict]],
-                   audience: str) -> Optional[float]:
+                   audience: str, price_audience: str = "any") -> Optional[float]:
     """List price less the single best discount for ``audience`` or ``any``.
 
-    None when the price or the discounts are unknown. Never below zero.
+    A price quoted for ``audience`` itself is returned as is, even when the
+    discounts are unknown. Otherwise None when the price, the list price or
+    the discounts are unknown. Never below zero.
     """
-    if price is None or discounts is None:
+    if price is None:
         return None
-    best = max((_saving(price, d) for d in discounts
+    if price_audience == audience:
+        return price
+    base = list_price(price, discounts, price_audience)
+    if base is None or discounts is None:
+        return None
+    best = max((_saving(base, d) for d in discounts
                 if d.get("audience", "any") in (audience, "any")), default=0.0)
-    return round(max(price - best, 0.0), 2)
+    return round(max(base - best, 0.0), 2)
 
 
 def offer_dict(p: Product) -> dict:
     discounts = discounts_from_json(p.discounts_json)
+    quoted_for = p.price_audience or "any"
     return {
         "product_id": p.id, "code": p.code, "title": p.title, "url": p.url,
         "seller": p.seller, "seller_rating": p.seller_rating,
-        "price": p.current_price,
-        "price_new_customer": audience_price(p.current_price, discounts, "new_customer"),
+        "price": p.current_price, "price_audience": quoted_for,
+        "list_price": list_price(p.current_price, discounts, quoted_for),
+        "price_new_customer": audience_price(
+            p.current_price, discounts, "new_customer", quoted_for),
         "price_returning_customer": audience_price(
-            p.current_price, discounts, "returning_customer"),
+            p.current_price, discounts, "returning_customer", quoted_for),
         "discounts": discounts, "extra": extra_from_json(p.extra_json),
         "last_seen": p.last_seen,
     }
 
 
 def _price_key(o: dict):
-    return (o["price"] is None, o["price"] if o["price"] is not None else 0.0,
+    # Cheapest to start with first: the new customer price, else the quoted one.
+    best = o["price_new_customer"] if o["price_new_customer"] is not None else o["price"]
+    return (best is None, best if best is not None else 0.0,
             o["seller"].casefold(), o["code"])
 
 
 def group_offers(products, *, variant: Optional[str] = None,
                  min_rating: Optional[float] = None) -> list[dict]:
     """Available, unarchived products grouped by variant (first seen order),
-    each group sorted by list price."""
+    each group cheapest to start with first."""
     rows = sorted((p for p in products
                    if p.current_in_stock and p.archived_at is None),
                   key=lambda p: (p.first_seen, p.id))

@@ -41,6 +41,12 @@ describe('offer grouping', () => {
     expect(groups[0].products.map((p) => p.seller)).toEqual(['Bedworks', 'Sleepco', 'Dozey'])
     expect(variantsOf(mattresses)).toEqual(['Double', 'King'])
   })
+  it('sorts by the new customer price when it is known', () => {
+    const quoted = { ...offer('Quoteco', 'Double', 310), price_new_customer: 280 }
+    const groups = groupByVariant([...mattresses, quoted])
+    expect(groups[0].products.map((p) => p.seller)).toEqual(
+      ['Quoteco', 'Bedworks', 'Sleepco', 'Dozey'])
+  })
   it('an empty selection shows every variant', () => {
     const groups = groupByVariant(mattresses)
     expect(selectVariants(groups, []).length).toBe(2)

@@ -60,7 +60,7 @@ async def _watch(sm, **kw):
 
 
 def test_plugin_api_grew_and_still_accepts_api_1():
-    assert PLUGIN_API == 2 and MIN_PLUGIN_API == 1
+    assert PLUGIN_API == 3 and MIN_PLUGIN_API == 1
 
 
 def test_product_offer_fields_default_for_api_1_handlers():
@@ -176,12 +176,12 @@ async def test_offers_api_groups_sorts_and_prices(client, sessionmaker_):
     body = (await client.get(f"/api/watches/{wid}/offers")).json()
     assert [g["variant"] for g in body["variants"]] == ["Double", "King"]
     double = body["variants"][0]["offers"]
-    assert [o["seller"] for o in double] == ["Sleepco", "Bedworks", "Dozey"]
-    bed = double[1]
+    assert [o["seller"] for o in double] == ["Bedworks", "Sleepco", "Dozey"]
+    bed = double[0]
     assert (bed["price"], bed["price_new_customer"], bed["price_returning_customer"]) == (
         300.0, 260.0, 280.0)
     assert double[2]["discounts"] is None and double[2]["price_new_customer"] is None
-    assert double[0]["discounts"] == [] and double[0]["price_returning_customer"] == 290.0
+    assert double[1]["discounts"] == [] and double[1]["price_returning_customer"] == 290.0
     assert bed["extra"] == {"delivery_days": "3"}
     assert [o["seller"] for o in body["variants"][1]["offers"]] == ["Bedworks"]
 
@@ -232,7 +232,8 @@ async def test_digest_renders_offer_watches_as_variant_blocks(sessionmaker_):
     summaries = offers.summarise_changes(prods, [])
     title, msg = build_digest([(w, prods)], [(ev, ev_prod)], T0, {wid: summaries})
     assert "*Double*" in msg and "*King*" in msg
-    assert "Bedworks £300.00, new £260.00, returning £280.00" in msg
+    assert "Bedworks new £260.00, returning £280.00, list £300.00" in msg
+    assert "Sleepco £290.00" in msg and "Dozey list £310.00" in msg
     assert "0 price changes, 0 discount changes" in msg
     assert "**Changes**" not in msg  # offer watch events are summarised, not listed
     assert "Gone" not in msg
@@ -362,3 +363,61 @@ async def test_status_products_carry_audience_prices(client, sessionmaker_):
     assert (bed["price_new_customer"], bed["price_returning_customer"]) == (260.0, 280.0)
     assert prods["dozey:double"]["price_new_customer"] is None
     assert "discounts_json" not in bed
+
+
+# ---- prices quoted for an audience (plugin API 3)
+
+def _d(audience, amount=None, percent=None):
+    return {"audience": audience, "amount": amount, "percent": percent}
+
+
+def test_list_price_adds_the_quoted_audience_discount_back():
+    lp = offers.list_price
+    assert lp(260.0, [_d("new_customer", 40), _d("returning_customer", 20)],
+              "new_customer") == 300.0
+    assert lp(240.0, [_d("new_customer", percent=20)], "new_customer") == 300.0
+    assert lp(295.0, [_d("any", 5)], "new_customer") == 300.0
+    assert lp(300.0, [], "new_customer") == 300.0
+    assert lp(300.0, None, "new_customer") is None
+    assert lp(250.0, [_d("new_customer", 40), _d("any", 10)], "new_customer") is None
+    assert lp(300.0, None) == 300.0  # quoted as the list price
+
+
+def test_audience_prices_from_a_new_customer_quote():
+    ds = [_d("new_customer", 40), _d("returning_customer", 20)]
+    ap = offers.audience_price
+    assert ap(260.0, ds, "new_customer", "new_customer") == 260.0
+    assert ap(260.0, ds, "returning_customer", "new_customer") == 280.0
+    # Unknown discounts: the quoted audience is still known, the others not.
+    assert ap(260.0, None, "new_customer", "new_customer") == 260.0
+    assert ap(260.0, None, "returning_customer", "new_customer") is None
+
+
+def test_product_price_audience_defaults_to_list():
+    assert P("A", "Thing", True).price_audience == "any"
+
+
+async def test_quoted_offers_through_the_api(client, sessionmaker_):
+    wid = await _watch(sessionmaker_, label="Mattresses")
+    q1 = _offer("Bedworks", "Double", 260.0, discounts=[
+        Discount("new_customer", amount=40), Discount("returning_customer", amount=20)])
+    q2 = _offer("Dozey", "Double", 250.0)
+    q3 = _offer("Odd", "Double", 270.0)
+    q1.price_audience = q2.price_audience = "new_customer"
+    q3.price_audience = "nonsense"
+    async with sessionmaker_() as s:
+        await _run(s, await s.get(Watch, wid), [q1, q2, q3], now=T0)
+    body = (await client.get(f"/api/watches/{wid}/offers")).json()
+    rows = {o["seller"]: o for o in body["variants"][0]["offers"]}
+    b, d = rows["Bedworks"], rows["Dozey"]
+    assert (b["list_price"], b["price_new_customer"], b["price_returning_customer"]) == (
+        300.0, 260.0, 280.0)
+    assert (d["list_price"], d["price_new_customer"], d["price_returning_customer"]) == (
+        None, 250.0, None)
+    assert rows["Odd"]["price_audience"] == "any"
+    # Sorted by what a new customer pays.
+    assert [o["seller"] for o in body["variants"][0]["offers"]] == ["Dozey", "Bedworks", "Odd"]
+    status = (await client.get("/api/status")).json()
+    prods = {p["seller"]: p for w in status for p in w["products"] if p["seller"]}
+    assert prods["Dozey"]["price_new_customer"] == 250.0
+    assert prods["Dozey"]["list_price"] is None and "price_audience" in prods["Dozey"]

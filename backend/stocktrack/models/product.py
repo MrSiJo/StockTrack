@@ -32,6 +32,8 @@ class Product(Base):
     seller_rating: Mapped[Optional[float]] = mapped_column(default=None)
     discounts_json: Mapped[Optional[str]] = mapped_column(default=None)
     extra_json: Mapped[str] = mapped_column(default="")
+    # Plugin API 3: who current_price is quoted for ("any" = list price).
+    price_audience: Mapped[str] = mapped_column(default="any")
     archived_at: Mapped[datetime | None] = mapped_column(UTCDateTime, default=None)
     last_checked: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     first_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
