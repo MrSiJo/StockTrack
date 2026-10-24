@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { getHistory, getPriceHistory, getStores, getRestockPatterns } from '../api/endpoints'
-import type { PricePoint, Store, RestockPattern } from '../api/types'
+import { useSearchParams } from 'react-router-dom'
+import { getEvents, getHistory, getPriceHistory, getStores, getRestockPatterns } from '../api/endpoints'
+import type { PricePoint, Store, RestockPattern, StockEvent } from '../api/types'
+import { EventFeed } from '../components/EventFeed'
 import type { ProductHistory, Episode } from '../lib/history'
 import { formatDuration, episodePhases, findRestockPattern } from '../lib/history'
 import { LoadingSpinner } from '../components/LoadingSpinner'
@@ -200,7 +202,49 @@ function ProductSection({
   )
 }
 
+const EVENTS_PAGE = 100
+const EVENTS_MAX = 500 // the API's own cap
+
+function EventsTab({ store }: { store: string }) {
+  const [limit, setLimit] = useState(EVENTS_PAGE)
+  const [events, setEvents] = useState<StockEvent[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setError(null)
+    getEvents(limit)
+      .then(setEvents)
+      .catch((e: unknown) => setError(String(e)))
+  }, [limit])
+
+  if (error) return <ErrorMessage message={error} />
+  if (events === null) return <LoadingSpinner />
+  const shown = store ? events.filter((e) => e.store === store) : events
+  const more = events.length >= limit && limit < EVENTS_MAX
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white px-4 pb-2">
+      <EventFeed events={shown} byDay empty="No events recorded." />
+      {more && (
+        <button
+          type="button"
+          onClick={() => setLimit(Math.min(limit + EVENTS_PAGE, EVENTS_MAX))}
+          className="py-2 text-sm text-gray-500 hover:text-gray-800 hover:underline"
+        >
+          Load more
+        </button>
+      )}
+    </div>
+  )
+}
+
+const TABS = [
+  { key: 'episodes', label: 'Stock episodes' },
+  { key: 'events', label: 'Events' },
+] as const
+
 export function HistoryPage() {
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') === 'events' ? 'events' : 'episodes'
   const [history, setHistory] = useState<ProductHistory[]>([])
   const [stores, setStores] = useState<Store[]>([])
   const [restockPatterns, setRestockPatterns] = useState<RestockPattern[]>([])
@@ -269,7 +313,28 @@ export function HistoryPage() {
         </div>
       </div>
 
-      {loading ? (
+      <div className="mb-4 flex gap-1 border-b border-gray-200" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            onClick={() => setParams(t.key === 'episodes' ? {} : { tab: t.key })}
+            className={`-mb-px border-b-2 px-3 py-1.5 text-sm ${
+              tab === t.key
+                ? 'border-gray-800 font-medium text-gray-900'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'events' ? (
+        <EventsTab store={selectedStore} />
+      ) : loading ? (
         <LoadingSpinner />
       ) : error ? (
         <ErrorMessage message={error} />

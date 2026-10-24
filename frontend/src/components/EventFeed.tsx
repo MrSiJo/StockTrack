@@ -1,4 +1,5 @@
 import type { StockEvent } from '../api/types'
+import { eventTime, groupByDay } from '../lib/events'
 
 function eventIcon(kind: string): string {
   if (kind === 'early_access') return '⚡'
@@ -24,14 +25,6 @@ function eventLabel(kind: string): string {
   return 'out of stock again'
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-}
-
 function formatPrice(price: number | null): string {
   if (price == null) return ''
   return ` (£${price.toFixed(0)})`
@@ -39,28 +32,55 @@ function formatPrice(price: number | null): string {
 
 interface Props {
   events: StockEvent[]
+  // Day headings (the full feed); without them each old event shows its date.
+  byDay?: boolean
+  empty?: string
 }
 
-export function EventFeed({ events }: Props) {
+function EventRow({ ev, now, timeOnly }: { ev: StockEvent; now: Date; timeOnly: boolean }) {
+  const time = timeOnly
+    ? new Date(ev.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    : eventTime(ev.ts, now)
+  return (
+    <li className="flex items-start gap-2 py-2 text-sm">
+      <span className="w-24 shrink-0 tabular-nums text-gray-400">{time}</span>
+      <span aria-hidden="true">{eventIcon(ev.kind)}</span>
+      <span className="text-gray-700">
+        {ev.store} {ev.product_title} —{' '}
+        {eventLabel(ev.kind)}
+        {formatPrice(ev.price)}
+      </span>
+    </li>
+  )
+}
+
+export function EventFeed({ events, byDay = false, empty = 'No recent stock events.' }: Props) {
+  const now = new Date()
   if (events.length === 0) {
+    return <p className="py-4 text-sm text-gray-500">{empty}</p>
+  }
+  if (byDay) {
     return (
-      <p className="py-4 text-sm text-gray-500">No recent stock events.</p>
+      <div>
+        {groupByDay(events, now).map((day) => (
+          <section key={day.label}>
+            <h3 className="pt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {day.label}
+            </h3>
+            <ul className="divide-y divide-gray-100">
+              {day.events.map((ev) => (
+                <EventRow key={ev.id} ev={ev} now={now} timeOnly />
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
     )
   }
   return (
     <ul className="divide-y divide-gray-100">
       {events.map((ev) => (
-        <li key={ev.id} className="flex items-start gap-2 py-2 text-sm">
-          <span className="w-10 shrink-0 tabular-nums text-gray-400">
-            {formatTime(ev.ts)}
-          </span>
-          <span aria-hidden="true">{eventIcon(ev.kind)}</span>
-          <span className="text-gray-700">
-            {ev.store} {ev.product_title} —{' '}
-            {eventLabel(ev.kind)}
-            {formatPrice(ev.price)}
-          </span>
-        </li>
+        <EventRow key={ev.id} ev={ev} now={now} timeOnly={false} />
       ))}
     </ul>
   )
