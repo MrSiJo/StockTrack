@@ -130,3 +130,34 @@ async def test_argon2_runs_off_the_event_loop(sessionmaker_, monkeypatch):
         assert await authenticate(s, "nobody", PW) is None
     assert hashed and verified
     assert loop_thread not in hashed + verified
+
+
+async def test_at_most_two_argon2_operations_run_at_once(sessionmaker_, monkeypatch):
+    """Each argon2 call takes 64 MiB: parallel logins must queue, not stack."""
+    import threading
+    import time
+    lock = threading.Lock()
+    running, peak = [0], [0]
+
+    def slow_verify(plain, hashed):
+        with lock:
+            running[0] += 1
+            peak[0] = max(peak[0], running[0])
+        time.sleep(0.05)
+        with lock:
+            running[0] -= 1
+        return False
+
+    async with sessionmaker_() as s:
+        await bootstrap_user(s, "admin", PW)
+    monkeypatch.setattr(auth_service, "verify_password", slow_verify)
+
+    async def attempt(name):
+        async with sessionmaker_() as s:
+            return await authenticate(s, name, "wrong-password-x")
+
+    import asyncio
+    results = await asyncio.gather(*(attempt("admin" if i % 2 else "nobody")
+                                     for i in range(6)))
+    assert results == [None] * 6
+    assert peak[0] == auth_service.ARGON2_CONCURRENCY == 2

@@ -5,7 +5,9 @@
 (the loser hits the constraint and gets SetupAlreadyComplete too).
 
 argon2 is deliberately slow and memory hard, so every hash and verify runs in
-a worker thread: on the event loop it would stall every other request.
+a worker thread (on the event loop it would stall every other request), and
+at most ARGON2_CONCURRENCY run at once (each takes 64 MiB; a burst of logins
+queues instead of stacking memory).
 """
 import asyncio
 
@@ -17,6 +19,28 @@ from stocktrack.models import User
 from stocktrack.passwords import hash_password, verify_password
 
 MIN_PASSWORD_LENGTH = 12
+ARGON2_CONCURRENCY = 2
+
+# Module level cap on concurrent argon2 work. The app runs one event loop;
+# the semaphore is rebuilt only if a different loop shows up (a fresh loop
+# per test under pytest), since an asyncio.Semaphore binds to one loop.
+_argon2_slots: asyncio.Semaphore | None = None
+_argon2_slots_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _slots() -> asyncio.Semaphore:
+    global _argon2_slots, _argon2_slots_loop
+    loop = asyncio.get_running_loop()
+    if _argon2_slots is None or _argon2_slots_loop is not loop:
+        _argon2_slots = asyncio.Semaphore(ARGON2_CONCURRENCY)
+        _argon2_slots_loop = loop
+    return _argon2_slots
+
+
+async def _argon2(func, *args):
+    """Run one argon2 call in a worker thread, at most ARGON2_CONCURRENCY at once."""
+    async with _slots():
+        return await asyncio.to_thread(func, *args)
 
 _DUMMY_HASH: str | None = None
 
@@ -58,7 +82,7 @@ async def bootstrap_user(session: AsyncSession, username: str, password: str) ->
     if await _user_exists(session):
         raise SetupAlreadyComplete("a user already exists")
 
-    password_hash = await asyncio.to_thread(hash_password, password)
+    password_hash = await _argon2(hash_password, password)
     user = User(username=username.strip(), password_hash=password_hash)
     session.add(user)
     try:
@@ -83,8 +107,8 @@ async def authenticate(session: AsyncSession, username: str, password: str) -> U
     if user is None:
         # Burn the same argon2 time as a real check so response time does not
         # reveal whether the username exists.
-        await asyncio.to_thread(lambda: verify_password(password, _dummy_hash()))
+        await _argon2(lambda: verify_password(password, _dummy_hash()))
         return None
-    if not await asyncio.to_thread(verify_password, password, user.password_hash):
+    if not await _argon2(verify_password, password, user.password_hash):
         return None
     return user
