@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 
@@ -27,6 +28,11 @@ function NavItem({ to, label, end }: NavItemProps) {
 
 export function Layout() {
   const logout = useAuthStore((s) => s.logout)
+  const [signOutError, setSignOutError] = useState<string | null>(null)
+  const signOut = async () => {
+    setSignOutError(null)
+    setSignOutError(await logout())
+  }
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b border-gray-200 bg-white">
@@ -43,10 +49,15 @@ export function Layout() {
               <NavItem to="/settings/stores" label="Stores" />
               <NavItem to="/settings/tokens" label="API tokens" />
             </nav>
+            {signOutError && (
+              <span role="alert" className="ml-auto text-sm text-red-600">
+                {signOutError}
+              </span>
+            )}
             <button
               type="button"
-              onClick={() => void logout()}
-              className="ml-auto rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              onClick={() => void signOut()}
+              className={`${signOutError ? '' : 'ml-auto '}rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900`}
             >
               Sign out
             </button>

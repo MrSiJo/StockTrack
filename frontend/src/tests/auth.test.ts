@@ -103,3 +103,43 @@ describe('session loss', () => {
     expect(useAuthStore.getState().status).toBe('login')
   })
 })
+
+describe('logout', () => {
+  async function authed() {
+    handler = () => json(ME)
+    const mod = await load()
+    await mod.useAuthStore.getState().bootstrap()
+    expect(mod.useAuthStore.getState().status).toBe('authed')
+    return mod
+  }
+
+  it('200 signs out', async () => {
+    const { useAuthStore } = await authed()
+    handler = () => json({ ok: true })
+    expect(await useAuthStore.getState().logout()).toBeNull()
+    expect(useAuthStore.getState().status).toBe('login')
+    expect(useAuthStore.getState().username).toBeNull()
+  })
+  it('401 means already signed out', async () => {
+    const { useAuthStore } = await authed()
+    handler = () => json({ detail: 'Authentication required' }, 401)
+    expect(await useAuthStore.getState().logout()).toBeNull()
+    expect(useAuthStore.getState().status).toBe('login')
+  })
+  it('a server error keeps the session and reports it', async () => {
+    const { useAuthStore, SIGN_OUT_FAILED } = await authed()
+    handler = () => json({ detail: 'boom' }, 500)
+    expect(await useAuthStore.getState().logout()).toBe(SIGN_OUT_FAILED)
+    expect(SIGN_OUT_FAILED).toBe('Sign out failed, try again')
+    expect(useAuthStore.getState().status).toBe('authed')
+    expect(useAuthStore.getState().username).toBe('a')
+  })
+  it('a network error keeps the session and reports it', async () => {
+    const { useAuthStore, SIGN_OUT_FAILED } = await authed()
+    handler = () => {
+      throw new TypeError('Failed to fetch')
+    }
+    expect(await useAuthStore.getState().logout()).toBe(SIGN_OUT_FAILED)
+    expect(useAuthStore.getState().status).toBe('authed')
+  })
+})

@@ -5,6 +5,8 @@ import { getMe, getSetupStatus, postLogin, postLogout, postSetup } from '../api/
 // In memory only. The session is an HttpOnly cookie; nothing is persisted here.
 export type AuthStatus = 'loading' | 'authed' | 'login' | 'setup' | 'error'
 
+export const SIGN_OUT_FAILED = 'Sign out failed, try again'
+
 export const COOKIE_HINT =
   'Signed in, but the browser did not keep the session cookie. Served over plain HTTP? Set COOKIE_SECURE=false.'
 
@@ -16,7 +18,8 @@ interface AuthState {
   /** Each returns an error message, or null on success. */
   login: (username: string, password: string) => Promise<string | null>
   setup: (username: string, password: string) => Promise<string | null>
-  logout: () => Promise<void>
+  /** Null once signed out; on failure the session is kept and the message returned. */
+  logout: () => Promise<string | null>
 }
 
 function loginMessage(e: unknown): string {
@@ -86,11 +89,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     try {
       await postLogout()
-    } catch {
-      // clear local state regardless
-    } finally {
-      set({ status: 'login', username: null })
+    } catch (e) {
+      // 401: the session had already gone, which is what sign out wants.
+      // Anything else: the server may still hold the session, so do not
+      // pretend it ended.
+      if (!(e instanceof ApiError) || e.status !== 401) return SIGN_OUT_FAILED
     }
+    set({ status: 'login', username: null })
+    return null
   },
 }))
 
