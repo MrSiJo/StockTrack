@@ -1,7 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import type { Product } from '../api/types'
 import {
+  filterByRating,
   groupByVariant,
+  ratingSteps,
   hasVariants,
   loadPrefs,
   savePrefs,
@@ -58,6 +60,21 @@ describe('offer grouping', () => {
   })
 })
 
+describe('rating filter', () => {
+  const rated = (r: number | null) => ({ ...offer('S' + r, 'Double', 100), seller_rating: r })
+  it('offers each distinct rating as a floor, highest few', () => {
+    const ps = [rated(4.6), rated(4.7), rated(4.75), rated(4.8), rated(4.9), rated(4.9), rated(null)]
+    expect(ratingSteps(ps)).toEqual([4.6, 4.7, 4.8, 4.9])
+    expect(ratingSteps([rated(4.2), rated(4.6), rated(4.7), rated(4.8), rated(4.9)])).toEqual(
+      [4.6, 4.7, 4.8, 4.9])
+  })
+  it('keeps sellers at or above the floor', () => {
+    const ps = [rated(4.6), rated(4.8), rated(4.9), rated(null)]
+    expect(filterByRating(ps, 4.8).map((p) => p.seller_rating)).toEqual([4.8, 4.9])
+    expect(filterByRating(ps, null)).toHaveLength(4)
+  })
+})
+
 describe('view prefs', () => {
   afterEach(() => vi.unstubAllGlobals())
 
@@ -69,9 +86,9 @@ describe('view prefs', () => {
         setItem: (k: string, v: string) => void store.set(k, v),
       },
     })
-    savePrefs(4, { variants: ['King'], collapsed: true })
-    expect(loadPrefs(4)).toEqual({ variants: ['King'], collapsed: true })
-    expect(loadPrefs(5)).toEqual({ variants: [], collapsed: false })
+    savePrefs(4, { variants: ['King'], collapsed: true, minRating: 4.8 })
+    expect(loadPrefs(4)).toEqual({ variants: ['King'], collapsed: true, minRating: 4.8 })
+    expect(loadPrefs(5)).toEqual({ variants: [], collapsed: false, minRating: null })
   })
   it('works when storage throws', () => {
     vi.stubGlobal('window', {
@@ -80,7 +97,7 @@ describe('view prefs', () => {
         setItem: () => { throw new Error('blocked') },
       },
     })
-    expect(() => savePrefs(4, { variants: [], collapsed: false })).not.toThrow()
-    expect(loadPrefs(4)).toEqual({ variants: [], collapsed: false })
+    expect(() => savePrefs(4, { variants: [], collapsed: false, minRating: null })).not.toThrow()
+    expect(loadPrefs(4)).toEqual({ variants: [], collapsed: false, minRating: null })
   })
 })
