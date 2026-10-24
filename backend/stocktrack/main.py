@@ -171,6 +171,7 @@ def create_app() -> FastAPI:
     from slowapi.errors import RateLimitExceeded
 
     from stocktrack.api.auth_middleware import AuthMiddleware
+    from stocktrack.api.csrf import CsrfMiddleware
     from stocktrack.api.rate_limit import limiter
     from stocktrack.api.routes.auth import router as auth_router
     from stocktrack.api.routes.setup import router as setup_router
@@ -192,6 +193,7 @@ def create_app() -> FastAPI:
 
     # Order matters: the middleware added LAST runs FIRST. CORS (dev only)
     # answers preflights before auth; auth gates before CSRF.
+    app.add_middleware(CsrfMiddleware, cookie_secure=settings.cookie_secure)
     app.add_middleware(AuthMiddleware, secret_key=settings.app_secret_key,
                        max_age_seconds=settings.session_max_age_seconds)
     app.add_middleware(

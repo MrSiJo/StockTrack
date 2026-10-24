@@ -10,7 +10,7 @@ os.environ.setdefault("APP_SECRET_KEY", "t" * 32)
 # The test transport is plain http://, so a Secure cookie would never be sent.
 os.environ.setdefault("COOKIE_SECURE", "false")
 
-CSRF_COOKIE_NAME = "stocktrack_csrf"
+from stocktrack.api.csrf import CSRF_COOKIE_NAME  # noqa: E402
 
 
 def csrf_headers(client) -> dict[str, str]:
