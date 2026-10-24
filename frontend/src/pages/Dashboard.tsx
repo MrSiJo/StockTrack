@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useStatusStore } from '../stores/statusStore'
 import { PhaseBadge } from '../components/PhaseBadge'
 import { BasketButton } from '../components/BasketButton'
@@ -10,7 +11,8 @@ import { muteProduct, unmuteProduct } from '../api/endpoints'
 import { watchDisplayName } from '../lib/watch'
 import { hasVariants, loadPrefs, savePrefs, type OfferViewPrefs } from '../lib/offers'
 import { OfferTable } from '../components/OfferTable'
-import type { WatchStatus, Product, CheckResult } from '../api/types'
+import { eventTime, recentEvents, RECENT_HOURS } from '../lib/events'
+import type { WatchStatus, Product, CheckResult, StockEvent } from '../api/types'
 
 function formatPrice(price: number | null): string {
   if (price == null) return '—'
@@ -418,6 +420,33 @@ function WatchGroup({
   )
 }
 
+// The last day's events only; the full feed lives on the History page.
+function RecentEvents({ events }: { events: StockEvent[] }) {
+  const now = new Date()
+  const recent = recentEvents(events, now)
+  const latest = events.length ? [...events].sort((a, b) => b.ts.localeCompare(a.ts))[0] : null
+  return (
+    <div className="mt-8">
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-base font-semibold text-gray-900">
+          Last {RECENT_HOURS} hours
+        </h2>
+        <Link to="/history?tab=events" className="text-sm text-gray-500 hover:text-gray-800 hover:underline">
+          All events →
+        </Link>
+      </div>
+      <div className="rounded-lg border border-gray-200 bg-white px-4">
+        <EventFeed
+          events={recent}
+          empty={latest
+            ? `Nothing in the last ${RECENT_HOURS} hours. Last event ${eventTime(latest.ts, now)}.`
+            : 'No stock events yet.'}
+        />
+      </div>
+    </div>
+  )
+}
+
 export function Dashboard() {
   const { watches, events, loading, error, fetchAll, checkNow } =
     useStatusStore()
@@ -549,14 +578,7 @@ export function Dashboard() {
         ))
       )}
 
-      <div className="mt-8">
-        <h2 className="mb-3 text-base font-semibold text-gray-900">
-          Recent events
-        </h2>
-        <div className="rounded-lg border border-gray-200 bg-white px-4">
-          <EventFeed events={events} />
-        </div>
-      </div>
+      <RecentEvents events={events} />
     </div>
   )
 }
