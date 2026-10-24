@@ -15,6 +15,7 @@ from stocktrack.services import gotify
 from stocktrack.services.archival import archival_tick
 from stocktrack.services.digest import digest_tick
 from stocktrack.services.heartbeat import heartbeat_tick
+from stocktrack.services.plugin_alert import plugin_alert
 from stocktrack.services.poller import check_watch
 from stocktrack.services.retention import retention_tick
 from stocktrack.services.settings_service import get as get_setting, gotify_config, seed_from_env
@@ -121,6 +122,12 @@ async def lifespan(app: FastAPI):
         await seed_from_env(s, env, env.app_secret_key)
         await seed_default_watches(s)
         await s.commit()
+    # The registry was built at import; tell the user about any plugin it had
+    # to skip. Never blocks startup: a skipped plugin is not fatal.
+    try:
+        await plugin_alert(sm, env.app_secret_key)
+    except Exception:  # noqa: BLE001
+        log.exception("plugin alert failed")
 
     scheduler = AsyncIOScheduler(timezone=env.tz)
     # The env value only seeds the first schedule; each tick re-reads the
@@ -160,6 +167,7 @@ def create_app() -> FastAPI:
     from fastapi.middleware.cors import CORSMiddleware
     from stocktrack.api.routes.events import router as events_router
     from stocktrack.api.routes.history import router as history_router
+    from stocktrack.api.routes.plugins import router as plugins_router
     from stocktrack.api.routes.products import router as products_router
     from stocktrack.api.routes.restock import router as restock_router
     from stocktrack.api.routes.settings import router as settings_router
@@ -182,6 +190,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(status_router, prefix="/api")
+    app.include_router(plugins_router, prefix="/api")
     app.include_router(events_router, prefix="/api")
     app.include_router(history_router, prefix="/api")
     app.include_router(products_router, prefix="/api")

@@ -182,3 +182,7 @@ def _attr(raw, name):
 
 
 product_handler = AoProductHandler()
+
+# Plugin contract (docs/plugins.md)
+PLUGIN_API = 1
+HANDLERS = [handler, product_handler]
