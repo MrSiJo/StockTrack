@@ -81,9 +81,14 @@ async def test_login_and_setup_need_csrf(anon_client):
     assert (await anon_client.post("/api/auth/login", json=body)).status_code == 403
 
 
-async def test_health_is_csrf_exempt(anon_client):
-    r = await anon_client.post("/api/health")
-    assert r.status_code == 405  # not a CSRF 403
+async def test_health_exemptions_are_get_only(anon_client, client):
+    assert (await anon_client.get("/api/health")).status_code == 200
+    # Unauthenticated, a POST on an exempt path is not exempt from auth...
+    assert (await anon_client.post("/api/health")).status_code == 401
+    # ...and signed in, it is not exempt from CSRF either.
+    client.headers.pop("X-CSRF-Token")
+    r = await client.post("/api/health")
+    assert r.status_code == 403 and "CSRF" in r.text
 
 
 async def test_unauthenticated_mutation_is_401_before_csrf(anon_client):

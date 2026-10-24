@@ -14,7 +14,9 @@ and set up again never inherits the old sessions, and sign out rotates it to
 end every session for the user at once. A cookie without a nonce (the first
 payload format) is refused.
 
-On a non exempt path a missing, tampered, expired or orphaned cookie gets 401.
+On a non exempt (method, path) a missing, tampered, expired or orphaned
+cookie gets 401. An exemption is for its pinned method only: POST
+/api/health, say, is not exempt.
 On success ``request.state.user_id`` is set for the routes.
 
 Without a valid session, an ``Authorization: Bearer`` API token is accepted
@@ -24,7 +26,7 @@ a valid session is the session: any bearer token on it is ignored, and CSRF
 applies in full. The Authorization header and the token are never logged;
 the token's name is, at debug.
 
-Adding a path to EXEMPT_PATHS or TOKEN_ALLOWLIST weakens auth: it needs
+Adding a pair to EXEMPT_ROUTES or a path to TOKEN_ALLOWLIST weakens auth: it needs
 explicit sign off and the pinned hash in tests/test_security_invariants.py
 updated.
 """
@@ -46,12 +48,14 @@ log = logging.getLogger(__name__)
 SESSION_COOKIE_NAME = "stocktrack_session"
 SESSION_SALT = "session"
 
-# Adding a path here weakens auth: requires explicit user sign off.
-EXEMPT_PATHS: frozenset[str] = frozenset({
-    "/api/health",
-    "/api/health/plugins",
-    "/api/setup",
-    "/api/auth/login",
+# (method, path) pairs reachable without a session. Adding one weakens
+# auth: requires explicit user sign off.
+EXEMPT_ROUTES: frozenset[tuple[str, str]] = frozenset({
+    ("GET", "/api/health"),
+    ("GET", "/api/health/plugins"),
+    ("GET", "/api/setup"),
+    ("POST", "/api/setup"),
+    ("POST", "/api/auth/login"),
 })
 
 
@@ -94,11 +98,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         secret_key: str,
         max_age_seconds: int,
         cookie_name: str = SESSION_COOKIE_NAME,
-        exempt_paths: Iterable[str] = EXEMPT_PATHS,
+        exempt_routes: Iterable[tuple[str, str]] = EXEMPT_ROUTES,
     ) -> None:
         super().__init__(app)
         self.cookie_name = cookie_name
-        self.exempt_paths = frozenset(exempt_paths)
+        self.exempt_routes = frozenset(exempt_routes)
         self._serializer = make_serializer(secret_key)
         self._max_age_seconds = max_age_seconds
 
@@ -141,7 +145,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         user_id = await self._session_user_id(request)
         request.state.user_id = user_id
         request.state.api_token = None
-        if user_id is not None or path in self.exempt_paths:
+        if user_id is not None or (request.method.upper(), path) in self.exempt_routes:
             return await call_next(request)
 
         presented = _bearer_token(request)

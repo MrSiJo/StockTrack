@@ -12,13 +12,15 @@ import re
 from fastapi.routing import APIRoute
 from starlette.routing import Route
 
-from stocktrack.api.auth_middleware import EXEMPT_PATHS as AUTH_EXEMPT
+from stocktrack.api.auth_middleware import EXEMPT_ROUTES as AUTH_EXEMPT
 from stocktrack.api.auth_middleware import TOKEN_ALLOWLIST
-from stocktrack.api.csrf import EXEMPT_PATHS as CSRF_EXEMPT
+from stocktrack.api.csrf import EXEMPT_ROUTES as CSRF_EXEMPT
 
-# Pinned hash of the three sets. Recompute with:
+# Pinned hash of the three sets. The two exempt sets hold (method, path)
+# pairs. Recompute with:
 #     python -c "import hashlib, json; print(hashlib.sha256(json.dumps(
-#         {'auth': sorted([...]), 'csrf': sorted([...]), 'token_get': sorted([...])},
+#         {'auth': sorted([(m, p), ...]), 'csrf': sorted([(m, p), ...]),
+#          'token_get': sorted([...])},
 #         sort_keys=True).encode()).hexdigest())"
 #
 # Change log:
@@ -27,7 +29,14 @@ from stocktrack.api.csrf import EXEMPT_PATHS as CSRF_EXEMPT
 #               csrf=[/api/health, /api/health/plugins]
 #               token_get=[/api/watches, /api/watches/{id}/offer-changes,
 #                          /api/watches/{id}/offers]
-EXPECTED_HASH = "9cdc045d2a9eac4d862b3a3cd16fc2020886f25e224eb042cd3681ec227e1fc8"
+#   2026-10-24  exempt sets pinned to (method, path) pairs (review finding,
+#               approved; a narrowing, not a widening):
+#               auth=[GET /api/health, GET /api/health/plugins, GET /api/setup,
+#                     POST /api/setup, POST /api/auth/login]
+#               csrf=[GET /api/health, GET /api/health/plugins]
+#               token_get unchanged
+EXPECTED_HASH = "82a14e001fbccca89c81d7fb8f936065de1c60e97f0e138db9b760791176787c"
+ALL_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -46,8 +55,8 @@ def test_exempt_paths_and_token_allowlist_have_not_changed():
     assert actual == EXPECTED_HASH, (
         "An exempt set or the token allowlist changed. Update this constant "
         "ONLY after explicit user sign off.\n"
-        f"  auth EXEMPT_PATHS: {sorted(AUTH_EXEMPT)}\n"
-        f"  csrf EXEMPT_PATHS: {sorted(CSRF_EXEMPT)}\n"
+        f"  auth EXEMPT_ROUTES: {sorted(AUTH_EXEMPT)}\n"
+        f"  csrf EXEMPT_ROUTES: {sorted(CSRF_EXEMPT)}\n"
         f"  TOKEN_ALLOWLIST:   {sorted(TOKEN_ALLOWLIST)}\n"
         f"  expected hash: {EXPECTED_HASH}\n"
         f"  actual hash:   {actual}"
@@ -56,7 +65,15 @@ def test_exempt_paths_and_token_allowlist_have_not_changed():
 
 def test_token_allowlist_is_get_only_reads_and_excludes_status():
     assert "/api/status" not in TOKEN_ALLOWLIST
-    assert not (TOKEN_ALLOWLIST & AUTH_EXEMPT)
+    assert not (TOKEN_ALLOWLIST & {path for _, path in AUTH_EXEMPT})
+
+
+def test_exempt_sets_are_method_path_pairs():
+    for method, path in AUTH_EXEMPT | CSRF_EXEMPT:
+        assert method in ALL_METHODS and path.startswith("/api/")
+    # Safe methods are CSRF exempt anyway: the CSRF set must never hold a
+    # mutating method.
+    assert not ({m for m, _ in CSRF_EXEMPT} & MUTATING)
 
 
 def app_routes(app) -> list[tuple[str, set[str]]]:
@@ -102,12 +119,19 @@ def test_the_route_walk_sees_every_registered_router(app):
 async def test_every_non_exempt_route_is_401_unauthenticated(app, anon_client):
     failures = []
     for path, methods in app_routes(app):
-        if path in AUTH_EXEMPT:
-            continue
         for method in methods - {"HEAD"}:
+            if (method, path) in AUTH_EXEMPT:
+                continue
             r = await anon_client.request(method, _concrete(path), json={})
             if r.status_code != 401:
                 failures.append(f"{method} {path} -> {r.status_code}")
+    # An exempt path is exempt for its pinned methods only: every other verb
+    # on it (routed or not) is refused before routing.
+    for path in {p for _, p in AUTH_EXEMPT}:
+        for method in sorted(ALL_METHODS - {m for m, p in AUTH_EXEMPT if p == path}):
+            r = await anon_client.request(method, path, json={})
+            if r.status_code != 401:
+                failures.append(f"{method} {path} (exempt path, other verb) -> {r.status_code}")
     assert not failures, "unauthenticated access:\n  " + "\n  ".join(failures)
 
 
@@ -119,7 +143,7 @@ async def test_every_mutating_route_is_403_without_csrf(app, client):
     for path, methods in app_routes(app):
         for method in methods & MUTATING:
             r = await client.request(method, _concrete(path), json={})
-            if path in CSRF_EXEMPT:
+            if (method, path) in CSRF_EXEMPT:
                 if r.status_code == 403 and "CSRF" in r.text:
                     failures.append(f"{method} {path} unexpectedly CSRF blocked")
             elif r.status_code != 403:
@@ -133,10 +157,10 @@ async def test_api_token_only_reaches_the_allowlist(app, client, anon_client):
     headers = {"Authorization": f"Bearer {token}"}
     failures = []
     for path, methods in app_routes(app):
-        if path in AUTH_EXEMPT:
-            continue
         template = re.sub(r"\{[^}]+\}", "{id}", path)
         for method in methods - {"HEAD"}:
+            if (method, path) in AUTH_EXEMPT:
+                continue
             r = await anon_client.request(method, _concrete(path), headers=headers, json={})
             allowed = method == "GET" and template in TOKEN_ALLOWLIST
             if allowed and r.status_code in (401, 403):

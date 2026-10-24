@@ -6,7 +6,7 @@ Mutating verbs (POST/PUT/PATCH/DELETE) must echo it in ``X-CSRF-Token``; the
 two are compared with ``hmac.compare_digest`` (constant time).
 
 The cookie is readable by JavaScript by design (the SPA echoes it); it is not
-a credential on its own. Adding a path to EXEMPT_PATHS weakens CSRF: it needs
+a credential on its own. Adding a pair to EXEMPT_ROUTES weakens CSRF: it needs
 explicit sign off and the pinned hash in tests/test_security_invariants.py
 updated.
 """
@@ -23,8 +23,13 @@ CSRF_COOKIE_NAME = "stocktrack_csrf"
 CSRF_HEADER_NAME = "X-CSRF-Token"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
-# Adding a path here weakens CSRF: requires explicit user sign off.
-EXEMPT_PATHS: frozenset[str] = frozenset({"/api/health", "/api/health/plugins"})
+# (method, path) pairs exempt from the check. Safe methods are never checked,
+# so these GETs only document intent; a mutating pair here would weaken CSRF
+# and requires explicit user sign off.
+EXEMPT_ROUTES: frozenset[tuple[str, str]] = frozenset({
+    ("GET", "/api/health"),
+    ("GET", "/api/health/plugins"),
+})
 
 
 def _generate_token() -> str:
@@ -40,17 +45,18 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         cookie_secure: bool,
         cookie_name: str = CSRF_COOKIE_NAME,
         header_name: str = CSRF_HEADER_NAME,
-        exempt_paths: Iterable[str] = EXEMPT_PATHS,
+        exempt_routes: Iterable[tuple[str, str]] = EXEMPT_ROUTES,
     ) -> None:
         super().__init__(app)
         self.cookie_name = cookie_name
         self.header_name = header_name
-        self.exempt_paths = frozenset(exempt_paths)
+        self.exempt_routes = frozenset(exempt_routes)
         self.cookie_secure = cookie_secure
 
     async def dispatch(self, request: Request, call_next):
         method = request.method.upper()
-        if method not in SAFE_METHODS and request.url.path not in self.exempt_paths:
+        if (method not in SAFE_METHODS
+                and (method, request.url.path) not in self.exempt_routes):
             cookie_token = request.cookies.get(self.cookie_name) or ""
             header_token = request.headers.get(self.header_name) or ""
             if not cookie_token or not header_token or not hmac.compare_digest(
