@@ -143,6 +143,25 @@ class StoreOut(BaseModel):
     settings: list[StoreSettingOut]
 
 
+# ── Plugins ────────────────────────────────────────────────────────────────
+
+class PluginModuleOut(BaseModel):
+    module: str
+    source: str            # builtin | plugin
+    status: str            # loaded | replaced | skipped
+    plugin_api: Optional[int] = None
+    handlers: list[str]    # "name/kind"
+    error: Optional[str] = None
+
+
+class PluginReportOut(BaseModel):
+    plugin_api: int
+    min_plugin_api: int
+    plugins_dir: bool
+    plugins_dir_error: Optional[str] = None
+    modules: list[PluginModuleOut]
+
+
 # ── Preview ────────────────────────────────────────────────────────────────
 
 class PreviewRequest(BaseModel):
