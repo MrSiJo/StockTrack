@@ -8,6 +8,8 @@ import { LoadingSpinner } from '../components/LoadingSpinner'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { muteProduct, unmuteProduct } from '../api/endpoints'
 import { watchDisplayName } from '../lib/watch'
+import { hasVariants, loadPrefs, savePrefs, type OfferViewPrefs } from '../lib/offers'
+import { OfferTable } from '../components/OfferTable'
 import type { WatchStatus, Product, CheckResult } from '../api/types'
 
 function formatPrice(price: number | null): string {
@@ -244,6 +246,13 @@ function WatchGroup({
   const label = watchDisplayName(watch.label, watch.store)
   const [checkNote, setCheckNote] = useState<string | null>(null)
   const [sortByPpw, setSortByPpw] = useState(false)
+  const isOfferWatch = hasVariants(watch.products)
+  const [prefs, setPrefs] = useState<OfferViewPrefs>(() => loadPrefs(watch.id))
+  const updatePrefs = (next: OfferViewPrefs) => {
+    setPrefs(next)
+    savePrefs(watch.id, next)
+  }
+  const collapsed = isOfferWatch && prefs.collapsed
   const showLeadTime = watch.products.some((p) => p.delivery)
   const showPpw = watch.products.some((p) => p.price_per_watt != null)
   const sortedProducts = [...watch.products].sort(
@@ -283,13 +292,36 @@ function WatchGroup({
             <span className="text-xs text-gray-500 italic">{checkNote}</span>
           )}
         </div>
+        <span className="flex items-center gap-1.5">
+        {isOfferWatch && (
+          <button
+            type="button"
+            onClick={() => updatePrefs({ ...prefs, collapsed: !prefs.collapsed })}
+            aria-expanded={!collapsed}
+            className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-white hover:text-gray-800"
+          >
+            {collapsed ? 'Expand' : 'Collapse'}
+          </button>
+        )}
         <button
           onClick={handleCheck}
           className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-white hover:text-gray-800"
         >
           Check now
         </button>
+        </span>
       </div>
+      {collapsed ? (
+        <div className="rounded-b-lg border border-gray-200 bg-white px-4 py-2 text-xs text-gray-400">
+          {watch.products.length} offers hidden
+        </div>
+      ) : isOfferWatch ? (
+        <OfferTable
+          products={watch.products}
+          selected={prefs.variants}
+          onSelect={(variants) => updatePrefs({ ...prefs, variants })}
+        />
+      ) : (
       <div className="overflow-hidden rounded-b-lg border border-gray-200">
         <table className="min-w-full divide-y divide-gray-100">
           <thead>
@@ -381,6 +413,7 @@ function WatchGroup({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   )
 }

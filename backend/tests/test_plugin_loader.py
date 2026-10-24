@@ -164,3 +164,40 @@ def test_env_var_is_read_at_import(monkeypatch, plugin_dir):
     assert "shop" in sites.available()
     monkeypatch.setenv("STOCKTRACK_PLUGINS_DIR", "")
     assert sites.plugins_dir_from_env() is None
+
+
+_SPEC_PLUGIN = """
+from .base import SiteHandler
+
+class H(SiteHandler):
+    name = "specshop"
+    kind = "listing"
+    settings_spec = {spec}
+
+PLUGIN_API = 2
+HANDLERS = [H()]
+"""
+
+
+@pytest.mark.parametrize("spec, needle", [
+    ('[{"key": "a", "type": "str", "default": ""}]', "label"),
+    ('[{"label": "A", "type": "str", "default": ""}]', "key"),
+    ('[{"key": "a", "label": "A", "default": ""}]', "type"),
+    ('[{"key": "a", "label": "A", "type": "date", "default": ""}]', "type"),
+    ('[{"key": "a", "label": "A", "type": "str", "default": []}]', "default"),
+    ('["a"]', "dict"),
+    ('"a"', "list"),
+])
+def test_plugin_with_a_bad_settings_spec_is_skipped(plugin_dir, spec, needle):
+    # The Stores API needs every field; a bad spec must fail the load (and so
+    # the deploy health check), not 500 the Stores and Watches pages later.
+    _write(plugin_dir, "specshop.py", _SPEC_PLUGIN.replace("{spec}", spec))
+    sites.load_registry(plugin_dir)
+    entry = _report("specshop")
+    assert entry["status"] == "skipped" and needle in entry["error"]
+
+
+def test_every_store_validates_against_the_stores_schema():
+    from stocktrack.api.schemas import StoreOut
+    for s in sites.stores():
+        StoreOut.model_validate(s)
