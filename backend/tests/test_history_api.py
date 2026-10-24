@@ -5,6 +5,7 @@ from httpx import ASGITransport, AsyncClient
 
 from stocktrack.main import create_app
 from stocktrack.models import Event, Product, Watch
+from tests.conftest import authenticate
 
 
 @pytest.fixture
@@ -42,6 +43,7 @@ async def test_history_groups_and_summarizes(app):
         await _seed(app.state.sessionmaker)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://t") as ac:
+            await authenticate(ac, app.state.sessionmaker)
             r = await ac.get("/api/history")
             assert r.status_code == 200
             data = r.json()
@@ -61,5 +63,6 @@ async def test_history_store_filter_excludes_others(app):
         await _seed(app.state.sessionmaker)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://t") as ac:
+            await authenticate(ac, app.state.sessionmaker)
             assert (await ac.get("/api/history?store=johnlewis")).json() == []
             assert len(((await ac.get("/api/history?store=ao")).json())) == 1
