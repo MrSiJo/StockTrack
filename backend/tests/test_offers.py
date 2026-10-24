@@ -75,8 +75,14 @@ def test_discounts_json_keeps_unknown_apart_from_none():
     raw = offers.discounts_to_json([Discount("returning_customer", amount=20,
                                              code="BACK20")])
     assert json.loads(raw)[0]["code"] == "BACK20"
-    assert json.loads(offers.discounts_to_json([Discount("weird", amount=1)]))[0][
-        "audience"] == "any"
+    # An unknown audience or a discount worth nothing is dropped, never
+    # widened to everyone; junk in place of a list reads as unknown.
+    assert offers.discounts_to_json([Discount("staff", amount=1)]) == "[]"
+    assert offers.discounts_to_json([Discount("any")]) == "[]"
+    assert offers.discounts_to_json([("any", 5)]) == "[]"
+    assert json.loads(offers.discounts_to_json(
+        [{"audience": "any", "percent": "10"}]))[0]["percent"] == 10.0
+    assert offers.discounts_to_json("nope") is None
 
 
 def test_audience_price_uses_best_single_discount():
@@ -289,3 +295,59 @@ async def test_existing_db_gains_offer_columns(tmp_path):
         p = await s.get(Product, 1)
         assert p.variant == "" and p.discounts_json is None
     await engine.dispose()
+
+
+async def test_failed_pushes_record_one_price_move_once(sessionmaker_):
+    wid = await _watch(sessionmaker_, track_price_drops=True)
+    async with sessionmaker_() as s:
+        await _run(s, await s.get(Watch, wid), [_offer("Bedworks", "King", 100.0)],
+                   now=T0)
+    for day, ok in enumerate([False, False, False, True], start=1):
+        async with sessionmaker_() as s:
+            await _run(s, await s.get(Watch, wid), [_offer("Bedworks", "King", 50.0)],
+                       now=T0 + timedelta(days=day), sends_ok=ok)
+    async with sessionmaker_() as s:
+        rows = (await s.execute(select(ProductChange))).scalars().all()
+        assert [(c.old, c.new) for c in rows] == [("100.0", "50.0")]
+
+
+async def test_price_gap_does_not_lose_the_move(sessionmaker_):
+    wid = await _watch(sessionmaker_)
+    for day, price in enumerate([10.0, 12.0, None, 15.0]):
+        async with sessionmaker_() as s:
+            await _run(s, await s.get(Watch, wid), [_offer("Bedworks", "King", price)],
+                       now=T0 + timedelta(days=day))
+    async with sessionmaker_() as s:
+        rows = (await s.execute(select(ProductChange).order_by(ProductChange.id))
+                ).scalars().all()
+        assert [(c.old, c.new) for c in rows] == [("10.0", "12.0"), ("12.0", "15.0")]
+
+
+async def test_bad_plugin_values_do_not_break_the_poll_or_the_api(client, sessionmaker_):
+    wid = await _watch(sessionmaker_)
+    bad = _offer("Bedworks", "King", 100.0, rating="great",
+                 discounts=[object(), {"audience": "any", "amount": "lots"}])
+    bad.extra = ["not", "a", "dict"]
+    async with sessionmaker_() as s:
+        await _run(s, await s.get(Watch, wid), [bad], now=T0)
+    body = (await client.get(f"/api/watches/{wid}/offers",
+                             params={"min_rating": 4})).json()
+    assert body["variants"] == []
+    body = (await client.get(f"/api/watches/{wid}/offers")).json()
+    o = body["variants"][0]["offers"][0]
+    assert o["seller_rating"] is None and o["discounts"] == [] and o["extra"] == {}
+
+
+def test_digest_trophy_only_after_a_real_drop():
+    w = Watch(id=1, store="fake", url="u", label="Mattresses")
+    def prod(pid, seller, price, lowest, ref):
+        return Product(id=pid, watch_id=1, store="fake", code=seller.lower(),
+                       title=seller, variant="King", seller=seller,
+                       current_price=price, lowest_price=lowest, price_ref=ref,
+                       current_in_stock=True, first_seen=T0, last_seen=T0,
+                       discounts_json="[]", extra_json="")
+    prods = [prod(1, "Steady", 100.0, 100.0, 100.0),
+             prod(2, "Dropped", 90.0, 90.0, 120.0)]
+    _, msg = build_digest([(w, prods)], [], T0, {})
+    lines = msg.splitlines()
+    assert "• Steady £100.00" in lines and "• Dropped £90.00 🏆" in lines

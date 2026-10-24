@@ -5,6 +5,7 @@ handler reports, records silent ``ProductChange`` rows when a price or the
 discounts change, and works out what each audience would pay.
 """
 import json
+import logging
 from collections import OrderedDict
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
@@ -17,17 +18,45 @@ from stocktrack.sites.base import DISCOUNT_AUDIENCES, Discount
 
 AUDIENCES = ("new_customer", "returning_customer")
 
+log = logging.getLogger(__name__)
+
+
+def _num(v) -> Optional[float]:
+    if v is None or isinstance(v, bool):
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
 
 def discounts_to_json(discounts) -> Optional[str]:
-    """None (unknown) stays None; a list becomes a stable JSON string."""
-    if discounts is None:
+    """None (unknown) stays None; a list becomes a stable JSON string.
+
+    A discount with an unrecognised audience, or with neither a numeric amount
+    nor percent, is dropped: applying it to everyone would show a price nobody
+    can get. A value that is not a list at all reads as unknown.
+    """
+    if discounts is None or not isinstance(discounts, (list, tuple)):
         return None
     out = []
     for d in discounts:
-        row = asdict(d) if isinstance(d, Discount) else dict(d)
+        if isinstance(d, Discount):
+            row = asdict(d)
+        elif isinstance(d, dict):
+            row = dict(d)
+        else:
+            log.warning("offers: ignoring discount %r (not a Discount)", d)
+            continue
         if row.get("audience") not in DISCOUNT_AUDIENCES:
-            row["audience"] = "any"
-        out.append(row)
+            log.warning("offers: ignoring discount with audience %r",
+                        row.get("audience"))
+            continue
+        row["amount"], row["percent"] = _num(row.get("amount")), _num(row.get("percent"))
+        if row["amount"] is None and row["percent"] is None:
+            continue
+        row["code"], row["text"] = str(row.get("code") or ""), str(row.get("text") or "")
+        out.append({k: row[k] for k in ("audience", "amount", "percent", "code", "text")})
     return json.dumps(out, sort_keys=True)
 
 
@@ -55,36 +84,54 @@ def _fmt(v) -> Optional[str]:
     return None if v is None else repr(float(v))
 
 
-def apply_offer_fields(session, row: Product, p, now, *, old_price=None,
-                       record: bool) -> None:
+async def _last_recorded_price(session, product_id) -> Optional[float]:
+    raw = (await session.execute(
+        select(ProductChange.new)
+        .where(ProductChange.product_id == product_id,
+               ProductChange.field == "price")
+        .order_by(ProductChange.ts.desc(), ProductChange.id.desc())
+        .limit(1))).scalar_one_or_none()
+    return _num(raw)
+
+
+async def apply_offer_fields(session, row: Product, p, now, *, old_price=None,
+                             record: bool) -> None:
     """Copy the offer fields from a parsed product onto its row.
 
     With ``record`` (every poll except a row's first sighting) a change of
-    price against ``old_price``, or of the discounts, adds a ``ProductChange``.
+    price or of the discounts adds a ``ProductChange``. A price is compared
+    with the last recorded change when there is one, else with ``old_price``:
+    a failed push reverts ``current_price``, and a price can be missing for a
+    poll, so ``old_price`` alone would record one move twice or lose it.
     """
     new_discounts = discounts_to_json(getattr(p, "discounts", None))
+    new_price = _num(p.price)
     if record and row.id is not None:
-        if (old_price is not None and p.price is not None
-                and float(old_price) != float(p.price)):
-            session.add(ProductChange(product_id=row.id, ts=now, field="price",
-                                      old=_fmt(old_price), new=_fmt(p.price)))
+        if new_price is not None:
+            base = await _last_recorded_price(session, row.id)
+            if base is None:
+                base = _num(old_price)
+            if base is not None and base != new_price:
+                session.add(ProductChange(product_id=row.id, ts=now, field="price",
+                                          old=_fmt(base), new=_fmt(new_price)))
         if new_discounts != row.discounts_json:
             session.add(ProductChange(product_id=row.id, ts=now, field="discounts",
                                       old=row.discounts_json, new=new_discounts))
-    row.variant = getattr(p, "variant", "") or ""
-    row.seller = getattr(p, "seller", "") or ""
-    row.seller_rating = getattr(p, "seller_rating", None)
+    row.variant = str(getattr(p, "variant", "") or "")
+    row.seller = str(getattr(p, "seller", "") or "")
+    row.seller_rating = _num(getattr(p, "seller_rating", None))
     row.discounts_json = new_discounts
-    extra = getattr(p, "extra", None) or {}
+    extra = getattr(p, "extra", None)
     row.extra_json = json.dumps({str(k): str(v) for k, v in extra.items()},
-                                sort_keys=True) if extra else ""
+                                sort_keys=True) if isinstance(extra, dict) and extra else ""
 
 
 def _saving(price: float, d: dict) -> float:
-    if d.get("amount") is not None:
-        return float(d["amount"])
-    if d.get("percent") is not None:
-        return price * float(d["percent"]) / 100.0
+    amount, percent = _num(d.get("amount")), _num(d.get("percent"))
+    if amount is not None:
+        return amount
+    if percent is not None:
+        return price * percent / 100.0
     return 0.0
 
 
@@ -140,7 +187,7 @@ def group_offers(products, *, variant: Optional[str] = None,
 
 
 def has_variants(products) -> bool:
-    return any(p.variant for p in products)
+    return any(p.variant and p.archived_at is None for p in products)
 
 
 async def recent_changes(session, product_ids, since) -> list[ProductChange]:

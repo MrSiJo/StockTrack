@@ -62,8 +62,12 @@ def _offer_blocks(watch, prods, summaries) -> list[str]:
             continue
         lines.append(f"*{g['variant'] or 'other'}*")
         for o in priced[:3]:
-            low = (" 🏆" if any(p.id == o["product_id"]
-                               and p.current_price == p.lowest_price for p in prods)
+            # A trophy only once the price has come down from a higher one:
+            # lowest_price starts at the first price seen.
+            low = (" 🏆" if any(p.id == o["product_id"] and p.lowest_price is not None
+                               and p.current_price == p.lowest_price
+                               and p.price_ref is not None
+                               and p.lowest_price < p.price_ref for p in prods)
                    else "")
             lines.append(f"• {_offer_price_line(o)}{low}")
         s = by_variant.get(g["variant"])

@@ -353,7 +353,7 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
                 row.archived_at = None
             row.price_ref = p.price
             row.lowest_price = p.price
-            apply_offer_fields(session, row, p, now, record=False)
+            await apply_offer_fields(session, row, p, now, record=False)
             row.availability = curr
             row.current_in_stock = curr != "oos"
             row.available_since = now if curr != "oos" else None
@@ -373,7 +373,7 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
                 row.archived_at = None
             row.price_ref = p.price
             row.lowest_price = p.price
-            apply_offer_fields(session, row, p, now, record=False)
+            await apply_offer_fields(session, row, p, now, record=False)
             row.availability = "oos"
             row.current_in_stock = False
             row.available_since = None
@@ -415,7 +415,7 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
         row.spec_watts = parse_watts(p.title)
         if row.archived_at is not None:
             row.archived_at = None
-        apply_offer_fields(session, row, p, now, old_price=old_price, record=True)
+        await apply_offer_fields(session, row, p, now, old_price=old_price, record=True)
 
         if curr == prev:
             # No phase change — just update availability and current_in_stock
