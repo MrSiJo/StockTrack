@@ -19,6 +19,7 @@ class WatchOut(BaseModel):
     kind: str
     track_price_drops: bool
     track_price_rises: bool
+    quiet: bool = False
     price_drop_min_pct: Optional[float]
     price_drop_min_abs: Optional[float]
     price_target: Optional[float]
@@ -40,6 +41,7 @@ class WatchCreate(BaseModel):
     kind: str = "listing"
     track_price_drops: bool = False
     track_price_rises: bool = False
+    quiet: bool = False
     price_drop_min_pct: Optional[float] = None
     price_drop_min_abs: Optional[float] = None
     price_target: Optional[float] = None
@@ -56,6 +58,7 @@ class WatchUpdate(BaseModel):
     kind: Optional[str] = None
     track_price_drops: Optional[bool] = None
     track_price_rises: Optional[bool] = None
+    quiet: Optional[bool] = None
     price_drop_min_pct: Optional[float] = None
     price_drop_min_abs: Optional[float] = None
     price_target: Optional[float] = None
@@ -81,6 +84,9 @@ class ProductOut(BaseModel):
     available_since: Optional[datetime]
     last_checked: Optional[datetime]
     spec_watts: Optional[int] = None
+    variant: str = ""
+    seller: str = ""
+    seller_rating: Optional[float] = None
 
     @computed_field  # type: ignore[misc]
     @property

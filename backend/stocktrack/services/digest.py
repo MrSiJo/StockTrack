@@ -15,6 +15,12 @@ from sqlalchemy import select
 from stocktrack.models import Event, Product, Watch
 from stocktrack.services import gotify
 from stocktrack.services.notify_format import fmt_price, md_lines
+from stocktrack.services.offers import (
+    group_offers,
+    has_variants,
+    recent_changes,
+    summarise_changes,
+)
 from stocktrack.services.settings_service import get as get_setting
 from stocktrack.services.settings_service import gotify_config, set_value
 
@@ -32,16 +38,60 @@ def _phase(p) -> str:
     return p.availability or ("public" if p.current_in_stock else "oos")
 
 
-def build_digest(watch_products, recent_events, now) -> tuple[str, str]:
+def _offer_price_line(o: dict) -> str:
+    parts = [f"{o['seller'] or o['title'] or o['code']} {fmt_price(o['price'])}"]
+    if o["price_new_customer"] is not None and o["price_new_customer"] != o["price"]:
+        parts.append(f"new {fmt_price(o['price_new_customer'])}")
+    if (o["price_returning_customer"] is not None
+            and o["price_returning_customer"] != o["price"]):
+        parts.append(f"returning {fmt_price(o['price_returning_customer'])}")
+    return ", ".join(parts)
+
+
+def _offer_blocks(watch, prods, summaries) -> list[str]:
+    """Variant watches: per variant the three cheapest offers and a count of
+    price and discount changes over the digest window."""
+    by_variant = {s["variant"]: s for s in (summaries or [])}
+    lines = [f"**{watch.label or watch.store}**"]
+    groups = group_offers(prods)
+    if not groups:
+        lines.append("No offers available right now.")
+    for g in groups:
+        priced = [o for o in g["offers"] if o["price"] is not None]
+        if not priced:
+            continue
+        lines.append(f"*{g['variant'] or 'other'}*")
+        for o in priced[:3]:
+            low = (" 🏆" if any(p.id == o["product_id"]
+                               and p.current_price == p.lowest_price for p in prods)
+                   else "")
+            lines.append(f"• {_offer_price_line(o)}{low}")
+        s = by_variant.get(g["variant"])
+        if s is not None:
+            lines.append(f"{s['price_changes']} price changes, "
+                         f"{s['discount_changes']} discount changes")
+    return lines
+
+
+def build_digest(watch_products, recent_events, now,
+                 offer_changes=None) -> tuple[str, str]:
     """Pure formatter. ``watch_products`` is ``[(Watch, [Product, ...]), ...]``,
-    ``recent_events`` is ``[(Event, Product), ...]`` newest-first."""
+    ``recent_events`` is ``[(Event, Product), ...]`` newest-first.
+    ``offer_changes`` maps a watch id to its ``summarise_changes`` output; a
+    watch whose products have variants renders as offer blocks instead."""
+    offer_changes = offer_changes or {}
     all_products = [p for _, prods in watch_products for p in prods]
     in_stock = [p for p in all_products if _phase(p) != "oos"]
     title = (f"📰 StockTrack digest — "
              f"{len(in_stock)}/{len(all_products)} in stock")
 
     lines = []
+    offer_watch_ids = set()
     for watch, prods in watch_products:
+        if has_variants(prods):
+            offer_watch_ids.add(watch.id)
+            lines.extend(_offer_blocks(watch, prods, offer_changes.get(watch.id)))
+            continue
         buyable = sorted(
             (p for p in prods if _phase(p) != "oos"),
             key=lambda p: (p.current_price is None, p.current_price),
@@ -58,6 +108,9 @@ def build_digest(watch_products, recent_events, now) -> tuple[str, str]:
     if not lines:
         lines.append("Nothing in stock right now.")
 
+    # Offer watches are summarised above; their events would swamp this list.
+    recent_events = [(e, p) for e, p in recent_events
+                     if p.watch_id not in offer_watch_ids]
     if recent_events:
         lines.append("")
         lines.append("**Changes**")
@@ -101,15 +154,22 @@ async def digest_tick(sessionmaker, secret_key: str, *, tz: str = "UTC",
                     for w in watches]
 
         window = timedelta(days=7 if cadence == "weekly" else 1)
+        offer_ids = [w.id for w, prods in by_watch if has_variants(prods)]
         recent = (await s.execute(
             select(Event, Product)
             .join(Product, Event.product_id == Product.id)
-            .where(Event.ts >= now - window)
+            .where(Event.ts >= now - window, Product.watch_id.not_in(offer_ids))
             .order_by(Event.ts.desc())
             .limit(30)
         )).all()
 
-        title, message = build_digest(by_watch, recent, now)
+        offer_changes = {}
+        for w, prods in by_watch:
+            if has_variants(prods):
+                changes = await recent_changes(s, [p.id for p in prods], now - window)
+                offer_changes[w.id] = summarise_changes(prods, changes)
+
+        title, message = build_digest(by_watch, recent, now, offer_changes)
         cfg = await gotify_config(s, secret_key)
         ok = await asyncio.to_thread(sender, cfg, title, message,
                                      markdown=True, priority=priority)

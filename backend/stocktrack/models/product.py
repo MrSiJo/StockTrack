@@ -26,6 +26,12 @@ class Product(Base):
     muted_until: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     available_since: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     spec_watts: Mapped[int | None] = mapped_column(default=None)
+    # Offers (plugin API 2). discounts_json NULL = unknown; "[]" = none listed.
+    variant: Mapped[str] = mapped_column(default="")
+    seller: Mapped[str] = mapped_column(default="")
+    seller_rating: Mapped[Optional[float]] = mapped_column(default=None)
+    discounts_json: Mapped[Optional[str]] = mapped_column(default=None)
+    extra_json: Mapped[str] = mapped_column(default="")
     archived_at: Mapped[datetime | None] = mapped_column(UTCDateTime, default=None)
     last_checked: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, default=None)
     first_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

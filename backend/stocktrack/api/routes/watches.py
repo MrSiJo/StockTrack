@@ -13,7 +13,7 @@ from stocktrack.api.schemas import (
     WatchUpdate,
 )
 from stocktrack.bootstrap import get_settings
-from stocktrack.models import Event, Product, Watch
+from stocktrack.models import Event, Product, ProductChange, Watch
 from stocktrack.services import gotify
 from stocktrack.services.poller import build_status_summary, check_watch, matches
 from stocktrack.services.settings_service import get as get_setting
@@ -162,6 +162,8 @@ async def delete_watch(
     if w is None:
         raise HTTPException(status_code=404, detail="Watch not found")
     await session.execute(delete(Event).where(Event.product_id.in_(
+        select(Product.id).where(Product.watch_id == watch_id))))
+    await session.execute(delete(ProductChange).where(ProductChange.product_id.in_(
         select(Product.id).where(Product.watch_id == watch_id))))
     await session.execute(delete(Product).where(Product.watch_id == watch_id))
     await session.delete(w)

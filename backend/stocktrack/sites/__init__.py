@@ -22,7 +22,7 @@ from .base import SiteHandler
 log = logging.getLogger(__name__)
 
 # The contract version core implements, and the oldest it still accepts.
-PLUGIN_API = 1
+PLUGIN_API = 2
 MIN_PLUGIN_API = 1
 
 _NOT_MODULES = {"base"}
