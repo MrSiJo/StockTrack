@@ -146,10 +146,32 @@ async def test_api_token_only_reaches_the_allowlist(app, client, anon_client):
     assert not failures, "token scope violations:\n  " + "\n  ".join(failures)
 
 
-async def test_plugin_health_exposes_only_status_and_skipped(anon_client):
-    r = await anon_client.get("/api/health/plugins")
-    assert r.status_code in (200, 503)
-    assert set(r.json()) == {"status", "skipped"}
+async def test_plugin_health_exposes_only_status_and_skipped_names(anon_client, tmp_path):
+    """Unauthenticated: exactly {"status", "skipped": [module names]}, healthy
+    or not. Error text, sources and paths stay on the authenticated
+    /api/plugins."""
+    from stocktrack import sites
+
+    def check(r):
+        body = r.json()
+        assert set(body) == {"status", "skipped"}
+        assert body["status"] in ("ok", "degraded")
+        assert isinstance(body["skipped"], list)
+        assert all(isinstance(name, str) for name in body["skipped"])
+        assert (r.status_code, body["status"]) in ((200, "ok"), (503, "degraded"))
+
+    check(await anon_client.get("/api/health/plugins"))
+    (tmp_path / "bad.py").write_text("raise RuntimeError('boom')", encoding="utf-8")
+    try:
+        sites.load_registry(tmp_path)
+        r = await anon_client.get("/api/health/plugins")
+        sites.load_registry(tmp_path / "missing")
+        r_dir = await anon_client.get("/api/health/plugins")
+    finally:
+        sites.load_registry(None)
+    check(r)
+    assert r.json()["skipped"] == ["bad"]
+    check(r_dir)
 
 
 async def test_health_is_public(anon_client):
