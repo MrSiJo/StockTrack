@@ -24,8 +24,9 @@ Browser ──HTTP──▶ nginx (stocktrack-ui :80)
 
 There is no separate database server, queue, or cache. The backend never
 serves the SPA itself — nginx does, and same-origin `/api` proxying means no
-CORS in production (the CORS allow-list in `main.py` exists only for the Vite
-dev server on `:5173`).
+CORS in production. The Vite dev server proxies `/api` too, so CORS is off
+unless `CORS_DEV_ORIGINS` names origins (for a dev UI served from another
+origin).
 
 ## Components
 
@@ -166,40 +167,55 @@ for the variable reference.
 ## Authentication
 
 Two middlewares guard every request. Starlette runs the one added last first, so
-the order is: CORS (dev only, answers preflights), then **auth**, then **CSRF**,
-then the route.
+the order is: CORS (only when `CORS_DEV_ORIGINS` is set, answers preflights),
+then **auth**, then **CSRF**, then the route.
 
-* **Auth** (`api/auth_middleware.py`). A request is allowed if it targets an
-  exempt path (`/api/health`, `/api/health/plugins`, `/api/setup`,
-  `/api/auth/login`), or carries a valid session, or carries a valid API token
-  for an allowlisted `GET`. Anything else gets `401`. A valid token on any other
-  endpoint gets `403`.
+* **Auth** (`api/auth_middleware.py`). A request is allowed if it is an
+  exempt method and path pair (`GET /api/health`, `GET /api/health/plugins`,
+  `GET` and `POST /api/setup`, `POST /api/auth/login`), or carries a valid
+  session, or carries a valid API token for an allowlisted `GET`. Anything else
+  gets `401`, including any other method on an exempt path. A valid token on
+  any other endpoint gets `403`.
 * **Session.** On sign in the backend sets the `stocktrack_session` cookie
   (`HttpOnly`, `SameSite=Strict`, `Secure` unless `COOKIE_SECURE=false`),
-  holding `{"user_id": ...}` signed with `APP_SECRET_KEY` by itsdangerous. The
-  signature is checked with a maximum age of `SESSION_MAX_AGE_SECONDS`, so
-  expiry is enforced server side.
-* **User exists check.** A valid signature is not enough: the middleware also
-  confirms the user row still exists (an indexed lookup, remembered for 30
-  seconds). Deleting the user ends their sessions without rotating the key.
+  holding `{"user_id": ..., "nonce": ...}` signed with `APP_SECRET_KEY` by
+  itsdangerous. The signature is checked with a maximum age of
+  `SESSION_MAX_AGE_SECONDS`, so expiry is enforced server side.
+* **Session nonce check.** A valid signature is not enough: on every request
+  the middleware confirms a user row with that id and that session nonce still
+  exists (one primary key lookup, not cached). The nonce is random per user, and
+  user ids are never reused, so deleting the user ends their sessions without
+  rotating the key and a user set up again never inherits them. **Sign out
+  rotates the nonce**, which ends every session for the user, in every browser,
+  not just the one signing out. A cookie without a nonce is refused.
 * **API tokens** (`services/token_service.py`). `st_` plus 32 random bytes. Only
   the SHA-256 hash is stored, and a presented token is compared in constant time
   against every active (unrevoked, unexpired) hash. A plain hash is enough
   because the token is high entropy, unlike a password; passwords use argon2id.
-  The exempt paths and the token allowlist are pinned by a test, so widening
-  either is a deliberate change.
+  The exempt method and path pairs and the token allowlist are pinned by a
+  test, so widening either is a deliberate change. A token name is unique among
+  unrevoked tokens, so a revoked token's name can be used again.
 * **CSRF** (`api/csrf.py`), double submit. A random token is set in the
   `stocktrack_csrf` cookie, readable by the SPA, on safe responses. `POST`,
   `PUT`, `PATCH` and `DELETE` must echo it in the `X-CSRF-Token` header, compared
-  in constant time, or they get `403`. Only the two health paths are exempt, so
-  `/api/setup` and `/api/auth/login` are protected. Token requests are `GET`
+  in constant time, or they get `403`. The only exempt pairs are the two health
+  `GET`s (safe methods are never checked anyway), so no mutating request skips
+  it and `/api/setup` and `/api/auth/login` are protected. Token requests are `GET`
   only, so CSRF never applies to them.
 * **Where state lives.** The `user` and `api_token` tables are in the same SQLite
-  database as everything else. Sessions are stateless signed cookies and are not
-  stored.
+  database as everything else. Sessions are signed cookies and are not stored;
+  the only server side session state is the user's nonce.
 * **Login hardening.** Sign in is rate limited per client address and locks a
-  username after repeated failures. That state is in process, which is fine
-  because the API runs one worker.
+  username after repeated failures. Each attempt counts as a failure before the
+  password check and is cleared on success, so parallel attempts cannot all slip
+  past the lock. argon2 runs in a worker thread, at most two at once, so it never
+  blocks the event loop. That state is in process, which is fine because the API
+  runs one worker.
+* **Client address.** The rate limiter keys on the right most
+  `X-Forwarded-For` entry, the one the UI's nginx appends, and only when the
+  request came from a private address. Behind a reverse proxy that entry is the
+  proxy for every browser unless nginx trusts the proxy's own entry: set
+  `REAL_IP_FROM` (see [deployment](./deployment.md#reverse-proxy)).
 
 ## The fetch layer (Cloudflare resilience)
 

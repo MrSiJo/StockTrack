@@ -18,9 +18,12 @@ side of the header is therefore client-controlled (a client can rotate
 its rate-limit bucket by forging it), while the right-most entry is the one
 our own trusted proxy wrote and cannot be forged.
 
-Accepted consequence: behind NPM the right-most entry is NPM's address, so
-every browser shares NPM's single bucket. That is acceptable for a
-single-user app, and it is stricter, not looser, than per-client keying.
+Behind an outer reverse proxy (for example NPM) the right-most entry would be
+that proxy's address for every browser, one shared bucket. The UI nginx
+avoids that when REAL_IP_FROM lists the proxy: it then takes $remote_addr
+from the entry the proxy appended (real_ip_recursive off), and appends the
+real browser address here. Unset, every browser shares the proxy's bucket,
+stricter rather than looser.
 
 To activate this on the app, set `app.state.limiter = limiter` and
 register `slowapi._rate_limit_exceeded_handler` for `RateLimitExceeded`.

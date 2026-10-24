@@ -47,6 +47,21 @@ Terminate TLS at your proxy and point it at
 `http://<docker-host>:${FRONTEND_PORT:-9181}`. The UI container is the only one
 that needs to be reachable; it proxies `/api` internally.
 
+### Real client address (REAL_IP_FROM)
+
+Behind a reverse proxy every request reaches the UI container from the proxy's
+address, so sign in and setup rate limits would be shared by every browser. Set
+`REAL_IP_FROM` in `.env` to the proxy's address or range (several, space
+separated, are fine; for example the RFC 1918 private ranges) and recreate the
+containers. nginx then takes the client address from the right most
+`X-Forwarded-For` entry, the one the trusted proxy added itself, and never from
+anything further left, which the client controls. The proxy must append to
+`X-Forwarded-For` (in nginx, `$proxy_add_x_forwarded_for`).
+
+A trusted address can claim any client address, so trust only what can reach
+the UI port, and firewall that port so only the proxy reaches it. Blank (the
+default) trusts no proxy.
+
 The proxy must pass the `Authorization` request header through to StockTrack
 unchanged. Some proxy features (for example an access list or a basic auth
 layer) replace or strip that header, which breaks API token clients. If a token
@@ -90,8 +105,13 @@ These need no session:
 | --- | --- |
 | `GET /api/health` | container and monitoring health check |
 | `GET /api/health/plugins` | status of store modules (status and skipped names only) |
-| `/api/setup` | one shot creation of the first user (refuses once a user exists) |
+| `GET` and `POST /api/setup` | whether setup is needed, and one shot creation of the first user (refuses once a user exists) |
 | `POST /api/auth/login` | sign in |
+
+Only the method shown is open: `POST /api/health`, for example, needs a session
+like anything else. `GET /api/health/plugins` returns only
+`{"status": "ok" | "degraded", "skipped": [module names]}` (503 when degraded);
+the error text and details are on the signed in `GET /api/plugins`.
 
 The web app itself (the static page and assets served by nginx) is not behind
 API auth; it shows the sign in page when the API answers `401`. Any other `/api`
@@ -103,7 +123,9 @@ A token lets a script or dashboard read a few endpoints without a browser
 session. Create, list and revoke tokens under **Settings > API tokens** (see
 [setup](./setup.md#api-tokens)). A token is `st_` followed by random characters.
 It is shown once, only its SHA-256 hash is stored, it can have an expiry, and it
-can be revoked at any time. The list records when each was last used.
+can be revoked at any time. The list records when each was last used. Names are
+unique among tokens that are not revoked, so a revoked token's name can be
+reused.
 
 Send it as a bearer token (here held in an environment variable, so it stays out of your shell history and scripts):
 

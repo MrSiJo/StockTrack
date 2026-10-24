@@ -53,6 +53,8 @@ out and invalidates the stored token (see
 | `APP_SECRET_KEY` | yes | — | 32+ chars (`openssl rand -hex 32`). Encrypts the Gotify token at rest and signs login sessions. |
 | `COOKIE_SECURE` | no | `true` | Marks the session and CSRF cookies `Secure`. HTTPS is expected; set `false` for a plain HTTP install. |
 | `SESSION_MAX_AGE_SECONDS` | no | `604800` | How long a sign in lasts (7 days). |
+| `REAL_IP_FROM` | no | blank | Reverse proxies (space separated addresses or CIDRs) whose `X-Forwarded-For` entry the UI's nginx trusts for the client address. See [deployment](./deployment.md#real-client-address-real_ip_from). |
+| `CORS_DEV_ORIGINS` | no | blank | Development only: comma separated origins allowed cross origin. Blank means no CORS. |
 | `DATABASE_URL` | no | `sqlite+aiosqlite:////data/stocktrack.db` | Async SQLite URL. |
 | `DATA_DIR` | no | `/data` | Data directory inside the container. |
 | `FRONTEND_PORT` | no | `9181` | Host port mapped to the UI container's `:80`. |

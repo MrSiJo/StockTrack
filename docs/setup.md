@@ -34,8 +34,10 @@ within 15 minutes lock that username for 15 minutes.
   `604800`, which is 7 days) from sign in. The server enforces the limit as well
   as the browser, so an old cookie stops working when it expires. After that you
   sign in again.
-* **Sign out:** use **Sign out** in the header. It clears the session cookie in
-  your browser.
+* **Sign out:** use **Sign out** in the header. It ends **every** session for
+  your user, in every browser and device, and clears the cookie in this one. If
+  the server cannot be reached the header says "Sign out failed, try again" and
+  you stay signed in, because the session has not ended.
 * **HTTP installs:** the session cookie is `Secure` by default, so a browser
   will not keep it over plain HTTP. If you sign in and are sent straight back to
   the sign in page, set `COOKIE_SECURE=false` (the page tells you this). See
@@ -46,7 +48,8 @@ within 15 minutes lock that username for 15 minutes.
 Other services (a dashboard, a script) can read some data with an API token
 instead of a session. Create them under **Settings > API tokens**:
 
-1. Give the token a name (it must be unique) and optionally an expiry in whole
+1. Give the token a name (no other active token may have it; a revoked
+   token's name can be reused) and optionally an expiry in whole
    days. Leave the expiry empty for a token that never expires.
 2. Copy the token when it is shown. **It is displayed once and cannot be shown
    again**; StockTrack stores only a hash of it. If you lose it, revoke it and
