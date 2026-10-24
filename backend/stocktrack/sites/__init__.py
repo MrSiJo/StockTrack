@@ -50,7 +50,32 @@ def _check_contract(mod) -> list[SiteHandler]:
     for h in handlers:
         if not isinstance(h, SiteHandler):
             raise ValueError(f"HANDLERS item {h!r} is not a SiteHandler")
+        _check_settings_spec(h)
     return list(handlers)
+
+
+SETTING_TYPES = ("str", "int", "float", "bool")
+
+
+def _check_settings_spec(h: SiteHandler) -> None:
+    """Each setting needs a string key and label, a known type and a default
+    of a matching kind; the Stores API and settings page rely on all four."""
+    spec = getattr(h, "settings_spec", None) or []
+    if not isinstance(spec, (list, tuple)):
+        raise ValueError(f"{h.name}: settings_spec is not a list")
+    for item in spec:
+        if not isinstance(item, dict):
+            raise ValueError(f"{h.name}: settings_spec item {item!r} is not a dict")
+        for field in ("key", "label"):
+            if not isinstance(item.get(field), str) or not item[field].strip():
+                raise ValueError(f"{h.name}: setting {item.get('key')!r} "
+                                 f"needs a string {field}")
+        if item.get("type") not in SETTING_TYPES:
+            raise ValueError(f"{h.name}: setting {item['key']!r} has unknown type "
+                             f"{item.get('type')!r}")
+        if not isinstance(item.get("default", ""), (bool, int, float, str)):
+            raise ValueError(f"{h.name}: setting {item['key']!r} default "
+                             f"must be a bool, number or string")
 
 
 def _discover_builtins() -> None:

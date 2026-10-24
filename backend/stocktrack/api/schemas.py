@@ -87,6 +87,23 @@ class ProductOut(BaseModel):
     variant: str = ""
     seller: str = ""
     seller_rating: Optional[float] = None
+    # Read from the row, never sent: the audience prices below come from it.
+    discounts_json: Optional[str] = Field(default=None, exclude=True)
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def price_new_customer(self) -> Optional[float]:
+        from stocktrack.services.offers import audience_price, discounts_from_json
+        return audience_price(self.current_price,
+                              discounts_from_json(self.discounts_json), "new_customer")
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def price_returning_customer(self) -> Optional[float]:
+        from stocktrack.services.offers import audience_price, discounts_from_json
+        return audience_price(self.current_price,
+                              discounts_from_json(self.discounts_json),
+                              "returning_customer")
 
     @computed_field  # type: ignore[misc]
     @property

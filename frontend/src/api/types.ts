@@ -22,6 +22,13 @@ export interface Product {
   last_checked: string | null
   spec_watts?: number | null
   price_per_watt?: number | null
+  // Offer listings (plugin API 2); "" / null on ordinary watches. The audience
+  // prices are null when the seller's discounts are unknown.
+  variant?: string
+  seller?: string
+  seller_rating?: number | null
+  price_new_customer?: number | null
+  price_returning_customer?: number | null
 }
 
 // ── Price history (GET /api/products/{id}/price-history) ───────────────────

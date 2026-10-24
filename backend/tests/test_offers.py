@@ -351,3 +351,14 @@ def test_digest_trophy_only_after_a_real_drop():
     _, msg = build_digest([(w, prods)], [], T0, {})
     lines = msg.splitlines()
     assert "• Steady £100.00" in lines and "• Dropped £90.00 🏆" in lines
+
+
+async def test_status_products_carry_audience_prices(client, sessionmaker_):
+    await _seed_offers(sessionmaker_)
+    watches = (await client.get("/api/status")).json()
+    prods = {p["code"]: p for w in watches for p in w["products"]}
+    bed = prods["bedworks:double"]
+    assert (bed["variant"], bed["seller"], bed["seller_rating"]) == ("Double", "Bedworks", 4.8)
+    assert (bed["price_new_customer"], bed["price_returning_customer"]) == (260.0, 280.0)
+    assert prods["dozey:double"]["price_new_customer"] is None
+    assert "discounts_json" not in bed
