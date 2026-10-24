@@ -66,3 +66,7 @@ def _price(p):
         return None
 
 handler = JohnLewisHandler()
+
+# Plugin contract (docs/plugins.md)
+PLUGIN_API = 1
+HANDLERS = [handler]

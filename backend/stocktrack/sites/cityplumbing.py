@@ -185,3 +185,7 @@ class CityPlumbingHandler(SiteHandler):
 
 
 handler = CityPlumbingHandler()
+
+# Plugin contract (docs/plugins.md)
+PLUGIN_API = 1
+HANDLERS = [handler]
