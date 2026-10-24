@@ -22,8 +22,9 @@ cd frontend && npm test && npm run build
 # One-off listing check without touching the DB
 cd backend && python -m stocktrack.cli ao "<listing-url>" --include "cirro" --json
 
-# Stack (two containers); the remote deploy target is the `docker-host` context
-docker --context docker-host compose up -d --build
+# Stack (two containers), local only. Production deploys from CI on push to
+# main (see Deployment below); never deploy prod by hand from a checkout.
+docker compose up -d --build
 ```
 
 ## Architecture in one breath
@@ -56,12 +57,17 @@ existing table; without it the new column 500s on any existing volume.
 
 * **Never commit** LAN IPs, secrets, or real watch URLs. Pre-commit enforces
   it (gitleaks, bandit, ruff, `forbid-environment-ips`); run `pre-commit install`.
-  There is no CI. If gitleaks fails with `WinError 4551` (Application
+  Forgejo Actions runs the suites (`.forgejo/workflows`); GitHub has no CI.
+  If gitleaks fails with `WinError 4551` (Application
   Control), commit from WSL; never `--no-verify`.
 * `docs/superpowers/` (specs, plans) and `.env` are git-ignored and stay local.
   `docs/*.md` are the public docs.
 * Store plugins (site handlers) are fine to publish; watch URLs are not. See
-  `docs/adding-a-store.md` for the handler pattern.
+  `docs/adding-a-store.md` and `docs/plugins.md`. **The built in handlers and
+  their tests are maintained in a private plugins repo and synced here** (the
+  commit says `chore(sites): sync ...`). Change them there, not here, or the
+  next sync overwrites the edit. Core (`sites/__init__.py`, `sites/base.py`) is
+  edited here as normal. Details in `CLAUDE.local.md`.
 * Deferred work, known limitations and ideas live in
   `docs/superpowers/BACKLOG.md` (local only). Read it before picking up
   follow-ups; lift an item into a spec when tackling it, delete it when done.
@@ -73,9 +79,11 @@ existing table; without it the new column 500s on any existing volume.
 2. Build it via the development ritual below (superpowers: brainstorming →
    writing-plans → subagent-driven-development → whole branch review → fixes).
 3. `--no-ff` merge to `main` locally; run the full suite on the merged result.
-4. Deploy: `docker --context docker-host compose up -d --build`; check
-   `stocktrack-api` is healthy and smoke test the touched endpoints live.
-5. `git push origin main` straight to `main`, **no PR**. Delete the branch.
+4. `git push origin main` straight to `main`, **no PR**. The push to Forgejo
+   deploys: CI runs both suites, then builds, re-pins, health checks
+   (including `/api/health/plugins`) and rolls back on failure.
+5. Check the deploy went green, smoke test the touched endpoints live, delete
+   the branch.
 
 When told "use the ritual", run the whole sequence without re-asking each
 step, but still confirm the push: origin is public and it is hard to reverse.
@@ -89,17 +97,17 @@ Every non trivial change follows it; do not skip steps because a change seems sm
 3. **Build** with full backend and frontend suites green before every commit; pre-commit must pass.
 4. **Verify in the browser** against a **local instance seeded with synthetic data**, never prod. Screenshot affected flows, check the console.
 5. **Back up before schema/data changes**, API stopped so the copy is consistent (paths in `CLAUDE.local.md`). Rollback = restore the copy + start the previous image.
-6. **Deploy** to the `docker-host` context (never `default`), then verify health, smoke checks and logs.
+6. **Deploy** by pushing `main` (CI deploys), then verify health, smoke checks and logs.
 7. **Ship** as above. Conventional commits.
 
-## Deployment: deliberately NOT Dockge managed
+## Deployment: Forgejo CI, not Dockge, not the laptop
 
-Decided 2026-07-26 when the homelab Docker hosts standardised their Dockge
-stacks. Do not move this compose onto the host to make Dockge see it: the repo
-compose is the single source of truth, and it uses `build:` with a context
-that does not exist on the host. Containers already show up on the homelab
-dashboard through the read only Docker socket proxy.
+Since 2026-10-24 production is deployed by the self hosted Forgejo Actions
+pipeline on every push to `main`: it builds both images from the commit and
+re-pins them in a host stack that holds no source (so it is still not Dockge
+managed). Store plugins reach production separately, from the private plugins
+repo, through a read only bind mount and an API restart, without an image
+rebuild. Host paths, the stack, rollback and logs are in `CLAUDE.local.md`.
 
-**Worth doing (not yet done):** pin a top-level `name:` in `compose.yaml`
-matching the current project name, so the named data volume does not depend
-on the checkout's directory name.
+The repo `compose.yaml` stays the standalone, build from source stack for
+anyone else running StockTrack.
