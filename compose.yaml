@@ -26,6 +26,10 @@ services:
       - wud.watch=false
       - com.centurylinklabs.watchtower.enable=false
     build: ./frontend
+    environment:
+      # Reverse proxies whose X-Forwarded-For entry nginx trusts for the
+      # real client IP (space separated addresses or CIDRs). See .env.example.
+      REAL_IP_FROM: ${REAL_IP_FROM:-}
     ports:
       - "${FRONTEND_PORT:-9181}:80"
     depends_on:
