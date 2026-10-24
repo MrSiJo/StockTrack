@@ -331,3 +331,25 @@ class RestockPatternOut(BaseModel):
     by_hour: list[int]
     by_weekday: list[int]
     summary: str
+
+
+# ── API tokens ─────────────────────────────────────────────────────────────
+
+class ApiTokenOut(BaseModel):
+    """Token metadata. Never the token or its hash."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    created_at: datetime
+    expires_at: Optional[datetime]
+    last_used_at: Optional[datetime]
+    revoked_at: Optional[datetime]
+
+
+class ApiTokenCreated(ApiTokenOut):
+    token: str  # shown once, in the create response only
+
+
+class ApiTokenCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    expires_in_days: Optional[int] = Field(default=None, ge=1, le=3650)

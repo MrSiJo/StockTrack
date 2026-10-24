@@ -9,8 +9,11 @@ services:
       - stocktrack-data:/data
     expose:
       - "9180"
-    # The API has no authentication — publishing it on the host bypasses the
-    # nginx proxy entirely. Uncomment only for local debugging.
+    # The API enforces its own sign in (session cookie, CSRF, read only API
+    # tokens), but keep it internal: the UI's nginx is the only intended way
+    # in. Published directly, the API's rate limiter trusts X-Forwarded-For
+    # from any private address, so a LAN client could pick its own rate limit
+    # bucket. Uncomment only for local debugging.
     # ports:
     #   - "9180:9180"
     healthcheck:
@@ -26,6 +29,10 @@ services:
       - wud.watch=false
       - com.centurylinklabs.watchtower.enable=false
     build: ./frontend
+    environment:
+      # Reverse proxies whose X-Forwarded-For entry nginx trusts for the
+      # real client IP (space separated addresses or CIDRs). See .env.example.
+      REAL_IP_FROM: ${REAL_IP_FROM:-}
     ports:
       - "${FRONTEND_PORT:-9181}:80"
     depends_on:

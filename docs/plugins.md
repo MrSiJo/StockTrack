@@ -66,7 +66,9 @@ plugin.
   `status` (`loaded`, `replaced` for a built in a plugin took over, or
   `skipped`), its `plugin_api`, its handlers and any error.
 * `GET /api/health/plugins` answers 200 when everything loaded and 503 when a
-  plugin or the plugins folder failed. Use it as a deploy check.
+  plugin or the plugins folder failed. Use it as a deploy check. It needs no
+  session, so it returns only `{"status", "skipped": [module names]}`; read the
+  errors from `GET /api/plugins`.
 
 ## Docker
 

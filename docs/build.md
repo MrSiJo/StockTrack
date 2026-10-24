@@ -40,7 +40,9 @@ uvicorn stocktrack.main:create_app --factory --reload --port 9180
 ```
 
 The backend serves only `/api/*` — point the Vite dev server at it (below).
-The CORS allow-list already includes Vite's `http://localhost:5173`.
+Vite proxies `/api` to it, so no CORS is needed. Only a UI served from another
+origin without that proxy needs `CORS_DEV_ORIGINS` (comma separated origins,
+blank by default, which means no CORS at all).
 
 ### Frontend (Node 22)
 

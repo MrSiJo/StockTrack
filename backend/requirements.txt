@@ -10,3 +10,7 @@ cryptography==49.*
 # on Linux). Imported lazily by sites/base.py; the proven pin from the watcher.
 curl_cffi>=0.7,<0.16
 httpx==0.28.*
+# Auth: argon2id passwords, signed timed session cookies, login rate limit.
+argon2-cffi==25.1.*
+itsdangerous==2.2.*
+slowapi==0.1.10

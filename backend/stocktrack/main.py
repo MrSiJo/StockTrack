@@ -18,6 +18,7 @@ from stocktrack.services.heartbeat import heartbeat_tick
 from stocktrack.services.plugin_alert import plugin_alert
 from stocktrack.services.poller import check_watch
 from stocktrack.services.retention import retention_tick
+from stocktrack.services.auth_service import warm_dummy_hash
 from stocktrack.services.settings_service import get as get_setting, gotify_config, seed_from_env
 
 log = logging.getLogger("stocktrack")
@@ -118,6 +119,7 @@ async def lifespan(app: FastAPI):
     engine = make_engine(env.database_url)
     await init_models(engine)
     sm = make_sessionmaker(engine)
+    warm_dummy_hash()
     async with sm() as s:
         await seed_from_env(s, env, env.app_secret_key)
         await seed_default_watches(s)
@@ -165,6 +167,15 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     from fastapi.middleware.cors import CORSMiddleware
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+
+    from stocktrack.api.auth_middleware import AuthMiddleware
+    from stocktrack.api.csrf import CsrfMiddleware
+    from stocktrack.api.rate_limit import limiter
+    from stocktrack.api.routes.auth import router as auth_router
+    from stocktrack.api.routes.setup import router as setup_router
+    from stocktrack.api.routes.tokens import router as tokens_router
     from stocktrack.api.routes.events import router as events_router
     from stocktrack.api.routes.history import router as history_router
     from stocktrack.api.routes.offers import router as offers_router
@@ -176,20 +187,33 @@ def create_app() -> FastAPI:
     from stocktrack.api.routes.stores import router as stores_router
     from stocktrack.api.routes.watches import router as watches_router
 
+    settings = get_settings()
     app = FastAPI(title="StockTrack", lifespan=lifespan)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Order matters: the middleware added LAST runs FIRST. CORS (only when
+    # CORS_DEV_ORIGINS is set) answers preflights before auth; auth gates
+    # before CSRF.
+    app.add_middleware(CsrfMiddleware, cookie_secure=settings.cookie_secure)
+    app.add_middleware(AuthMiddleware, secret_key=settings.app_secret_key,
+                       max_age_seconds=settings.session_max_age_seconds)
+    cors_origins = settings.cors_dev_origin_list()
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     @app.get("/api/health")
     async def health():
         return {"status": "ok"}
 
+    app.include_router(setup_router, prefix="/api")
+    app.include_router(auth_router, prefix="/api")
     app.include_router(status_router, prefix="/api")
     app.include_router(plugins_router, prefix="/api")
     app.include_router(events_router, prefix="/api")
@@ -200,5 +224,6 @@ def create_app() -> FastAPI:
     app.include_router(offers_router, prefix="/api")
     app.include_router(watches_router, prefix="/api")
     app.include_router(settings_router, prefix="/api")
+    app.include_router(tokens_router, prefix="/api")
 
     return app

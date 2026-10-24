@@ -39,6 +39,20 @@ class Settings(BaseSettings):
     product_archive_days: int = 14
     dashboard_url: str = ""
     heartbeat_hours: float = 24.0
+    # Process config, read from the environment on every boot (never seeded
+    # into the DB). Secure cookies by default: prod is HTTPS only. A plain
+    # HTTP install (and tests, local dev) must set COOKIE_SECURE=false or the
+    # browser drops the session cookie.
+    cookie_secure: bool = True
+    session_max_age_seconds: int = 7 * 24 * 3600
+    # Comma separated browser origins allowed cross origin with credentials,
+    # for a dev UI served from another origin. Empty (the default): no CORS
+    # at all. Production needs none (nginx serves the SPA and /api on one
+    # origin) and neither does `npm run dev` (Vite proxies /api).
+    cors_dev_origins: str = ""
+
+    def cors_dev_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_dev_origins.split(",") if o.strip()]
 
     @field_validator("app_secret_key")
     @classmethod
