@@ -9,8 +9,10 @@ import hashlib
 import json
 import re
 
+import pytest
 from fastapi.routing import APIRoute
-from starlette.routing import Route
+from starlette.applications import Starlette
+from starlette.routing import Mount, Route, WebSocketRoute
 
 from stocktrack.api.auth_middleware import EXEMPT_ROUTES as AUTH_EXEMPT
 from stocktrack.api.auth_middleware import TOKEN_ALLOWLIST
@@ -79,7 +81,8 @@ def test_exempt_sets_are_method_path_pairs():
 def app_routes(app) -> list[tuple[str, set[str]]]:
     """Every (path, methods) the app serves. FastAPI 0.139 keeps an included
     router as ONE ``_IncludedRouter`` entry in ``app.routes`` (no path, no
-    methods), so walk into it: a flat loop would silently see no API routes."""
+    methods), so walk into it: a flat loop would silently see no API routes.
+    Any other entry it cannot classify fails the test run."""
     out: list[tuple[str, set[str]]] = []
 
     def walk(routes, prefix: str) -> None:
@@ -90,11 +93,36 @@ def app_routes(app) -> list[tuple[str, set[str]]]:
                 walk(inner.routes, prefix + (getattr(ctx, "prefix", "") or ""))
                 continue
             if not isinstance(route, (APIRoute, Route)):
-                continue
+                # Mount, WebSocketRoute or anything new: fail loudly rather
+                # than let it escape every enumeration test below.
+                raise AssertionError(
+                    f"route walk cannot classify {type(route).__name__} "
+                    f"{getattr(route, 'path', route)!r} at prefix {prefix!r}; "
+                    "teach app_routes about it")
             out.append((prefix + route.path, set(route.methods or set())))
 
     walk(app.routes, "")
     return out
+
+
+class _FakeApp:
+    def __init__(self, routes):
+        self.routes = routes
+
+
+@pytest.mark.parametrize("route", [
+    Mount("/static", app=Starlette()),
+    WebSocketRoute("/ws", endpoint=lambda ws: None),
+    object(),
+], ids=["mount", "websocket", "unknown"])
+def test_the_route_walk_refuses_what_it_cannot_classify(route):
+    """A route the walk skipped would silently escape every enumeration test."""
+    with pytest.raises(AssertionError, match="cannot classify"):
+        app_routes(_FakeApp([APIRoute("/api/ok", endpoint=lambda: None), route]))
+
+
+def test_the_live_app_has_only_classifiable_routes(app):
+    assert app_routes(app)  # raises if any entry cannot be classified
 
 
 def _concrete(path: str) -> str:
