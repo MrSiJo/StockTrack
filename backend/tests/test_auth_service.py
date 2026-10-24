@@ -102,3 +102,31 @@ def test_warm_dummy_hash_builds_it_once(monkeypatch):
     with patch.object(auth_service, "hash_password") as hasher:
         warm_dummy_hash()
     hasher.assert_not_called()
+
+
+def _recording(real, seen):
+    import threading
+
+    def wrapper(*args):
+        seen.append(threading.get_ident())
+        return real(*args)
+    return wrapper
+
+
+async def test_argon2_runs_off_the_event_loop(sessionmaker_, monkeypatch):
+    """argon2 is deliberately slow (64 MiB, tens of ms): on the loop thread
+    it would stall every other request while a login or setup hashes."""
+    import threading
+    loop_thread = threading.get_ident()
+    hashed, verified = [], []
+    monkeypatch.setattr(auth_service, "hash_password",
+                        _recording(auth_service.hash_password, hashed))
+    monkeypatch.setattr(auth_service, "verify_password",
+                        _recording(auth_service.verify_password, verified))
+    async with sessionmaker_() as s:
+        await bootstrap_user(s, "admin", PW)
+    async with sessionmaker_() as s:
+        assert await authenticate(s, "admin", PW) is not None
+        assert await authenticate(s, "nobody", PW) is None
+    assert hashed and verified
+    assert loop_thread not in hashed + verified

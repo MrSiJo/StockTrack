@@ -3,7 +3,12 @@
 ``bootstrap_user`` is one shot: it refuses when a ``user`` row exists, and the
 ``singleton`` unique column means two concurrent calls cannot both insert
 (the loser hits the constraint and gets SetupAlreadyComplete too).
+
+argon2 is deliberately slow and memory hard, so every hash and verify runs in
+a worker thread: on the event loop it would stall every other request.
 """
+import asyncio
+
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,7 +58,8 @@ async def bootstrap_user(session: AsyncSession, username: str, password: str) ->
     if await _user_exists(session):
         raise SetupAlreadyComplete("a user already exists")
 
-    user = User(username=username.strip(), password_hash=hash_password(password))
+    password_hash = await asyncio.to_thread(hash_password, password)
+    user = User(username=username.strip(), password_hash=password_hash)
     session.add(user)
     try:
         await session.commit()
@@ -77,8 +83,8 @@ async def authenticate(session: AsyncSession, username: str, password: str) -> U
     if user is None:
         # Burn the same argon2 time as a real check so response time does not
         # reveal whether the username exists.
-        verify_password(password, _dummy_hash())
+        await asyncio.to_thread(lambda: verify_password(password, _dummy_hash()))
         return None
-    if not verify_password(password, user.password_hash):
+    if not await asyncio.to_thread(verify_password, password, user.password_hash):
         return None
     return user
