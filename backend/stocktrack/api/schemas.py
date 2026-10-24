@@ -90,6 +90,13 @@ class ProductOut(BaseModel):
     # Read from the row, never sent: the audience prices below come from it.
     discounts_json: Optional[str] = Field(default=None, exclude=True)
     price_audience: str = "any"
+    extra_json: Optional[str] = Field(default=None, exclude=True)
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def extra(self) -> dict[str, str]:
+        from stocktrack.services.offers import extra_from_json
+        return extra_from_json(self.extra_json)
 
     @computed_field  # type: ignore[misc]
     @property

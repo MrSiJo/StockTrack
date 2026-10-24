@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import type { Product } from '../api/types'
+import { extraLines } from '../components/OfferTable'
 import {
   filterByRating,
   groupByVariant,
@@ -57,6 +58,14 @@ describe('offer grouping', () => {
   it('toggles a chip on and off', () => {
     expect(toggleVariant([], 'King')).toEqual(['King'])
     expect(toggleVariant(['King', 'Double'], 'King')).toEqual(['Double'])
+  })
+})
+
+describe('extra lines', () => {
+  it('lists non-empty plugin notes as key: value lines', () => {
+    expect(extraLines({ delivery_days: '3', note: '', site_check: 'ok' })).toBe(
+      ['delivery days: 3', 'site check: ok'].join('\n'))
+    expect(extraLines(undefined)).toBe('')
   })
 })
 
