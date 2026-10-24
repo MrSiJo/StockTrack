@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { useAuthStore } from '../stores/authStore'
 
 interface NavItemProps {
   to: string
@@ -25,6 +26,7 @@ function NavItem({ to, label, end }: NavItemProps) {
 }
 
 export function Layout() {
+  const logout = useAuthStore((s) => s.logout)
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b border-gray-200 bg-white">
@@ -39,7 +41,15 @@ export function Layout() {
               <NavItem to="/settings/watches" label="Watches" />
               <NavItem to="/settings/gotify" label="Gotify" />
               <NavItem to="/settings/stores" label="Stores" />
+              <NavItem to="/settings/tokens" label="API tokens" />
             </nav>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="ml-auto rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            >
+              Sign out
+            </button>
           </div>
         </div>
       </header>
