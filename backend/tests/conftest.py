@@ -1,4 +1,5 @@
 import os
+import secrets
 
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -15,6 +16,27 @@ CSRF_COOKIE_NAME = "stocktrack_csrf"
 def csrf_headers(client) -> dict[str, str]:
     """Echo the client's CSRF cookie back as the header a mutating call needs."""
     return {"X-CSRF-Token": client.cookies.get(CSRF_COOKIE_NAME, "")}
+
+
+async def authenticate(client, sessionmaker, username: str = "tester") -> int:
+    """Make ``client`` a logged in browser: a user row, a signed session
+    cookie, and a CSRF cookie echoed on every request. Returns the user id."""
+    from stocktrack.api.auth_middleware import SESSION_COOKIE_NAME, make_serializer
+    from stocktrack.bootstrap import get_settings
+    from stocktrack.models import User
+
+    async with sessionmaker() as s:
+        # The middleware only checks the row exists; skip argon2 per test.
+        user = User(username=username, password_hash="unused")
+        s.add(user)
+        await s.commit()
+        user_id = user.id
+    token = make_serializer(get_settings().app_secret_key).dumps({"user_id": user_id})
+    csrf = secrets.token_urlsafe(32)
+    client.cookies.set(SESSION_COOKIE_NAME, token)
+    client.cookies.set(CSRF_COOKIE_NAME, csrf)
+    client.headers["X-CSRF-Token"] = csrf
+    return user_id
 
 
 @pytest_asyncio.fixture
@@ -34,12 +56,16 @@ async def app(sessionmaker_):
     httpx's ASGITransport does NOT trigger the ASGI lifespan, so we inject
     app.state.sessionmaker directly rather than relying on the lifespan to do it.
     """
+    from stocktrack.api.auth_middleware import user_exists_cache
+    from stocktrack.api.login_throttle import login_throttle
     from stocktrack.api.rate_limit import limiter
     from stocktrack.bootstrap import get_settings
     from stocktrack.main import create_app
 
     get_settings.cache_clear()
     limiter.reset()
+    login_throttle.clear()
+    user_exists_cache.clear()
     application = create_app()
     # Inject the test sessionmaker directly — routes read it via request.app.state
     application.state.sessionmaker = sessionmaker_
@@ -58,11 +84,14 @@ async def anon_client(app):
 
 
 @pytest_asyncio.fixture
-async def client(app):
-    """AsyncClient wired to the in-memory DB."""
+async def client(app, sessionmaker_):
+    """An authenticated AsyncClient (session cookie + CSRF header) wired to
+    the in-memory DB. The default for API tests; use ``anon_client`` to test
+    auth itself."""
     from httpx import ASGITransport, AsyncClient
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
+        await authenticate(c, sessionmaker_)
         yield c

@@ -170,7 +170,9 @@ def create_app() -> FastAPI:
     from slowapi import _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
 
+    from stocktrack.api.auth_middleware import AuthMiddleware
     from stocktrack.api.rate_limit import limiter
+    from stocktrack.api.routes.auth import router as auth_router
     from stocktrack.api.routes.setup import router as setup_router
     from stocktrack.api.routes.events import router as events_router
     from stocktrack.api.routes.history import router as history_router
@@ -183,10 +185,15 @@ def create_app() -> FastAPI:
     from stocktrack.api.routes.stores import router as stores_router
     from stocktrack.api.routes.watches import router as watches_router
 
+    settings = get_settings()
     app = FastAPI(title="StockTrack", lifespan=lifespan)
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+    # Order matters: the middleware added LAST runs FIRST. CORS (dev only)
+    # answers preflights before auth; auth gates before CSRF.
+    app.add_middleware(AuthMiddleware, secret_key=settings.app_secret_key,
+                       max_age_seconds=settings.session_max_age_seconds)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -200,6 +207,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(setup_router, prefix="/api")
+    app.include_router(auth_router, prefix="/api")
     app.include_router(status_router, prefix="/api")
     app.include_router(plugins_router, prefix="/api")
     app.include_router(events_router, prefix="/api")
