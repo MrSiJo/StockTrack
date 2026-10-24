@@ -3,11 +3,15 @@
 Reads the ``stocktrack_session`` cookie and verifies it with
 ``URLSafeTimedSerializer(APP_SECRET_KEY, salt="session")`` and ``max_age``, so
 a session expires server side and not only in the browser. The payload is
-``{"user_id": <int>}``.
+``{"user_id": <int>, "nonce": <str>}``.
 
-Beyond the fleet template, the cookie's user must still exist in ``user``: a
-deleted user's sessions stop working (within ``UserExistsCache``'s short TTL)
-without rotating APP_SECRET_KEY, which would also orphan the Gotify token.
+Beyond the fleet template, the cookie's (user id, nonce) pair must still match
+a ``user`` row: a deleted user's sessions stop working (within
+``UserExistsCache``'s short TTL) without rotating APP_SECRET_KEY, which would
+also orphan the Gotify token. The nonce is random per user, so a user deleted
+and set up again never inherits the old sessions, and sign out rotates it to
+end every session for the user at once. A cookie without a nonce (the first
+payload format) is refused.
 
 On a non exempt path a missing, tampered, expired or orphaned cookie gets 401.
 On success ``request.state.user_id`` is set for the routes.
@@ -82,24 +86,30 @@ def make_serializer(secret_key: str) -> URLSafeTimedSerializer:
 
 
 class UserExistsCache:
-    """Remembers, briefly, that a session's user row exists.
+    """Remembers, briefly, that a session's (user id, nonce) pair matches a row.
 
     Positive results only, so a deleted user is refused at most
     ``ttl_seconds`` after the delete. Saves one indexed lookup per request.
+    Sign out calls ``forget`` so a rotated nonce takes effect immediately.
     """
 
     def __init__(self, ttl_seconds: float = 30,
                  time_func: Callable[[], float] = time.monotonic) -> None:
         self.ttl_seconds = ttl_seconds
         self._time = time_func
-        self._seen: dict[int, float] = {}
+        self._seen: dict[tuple[int, str], float] = {}
 
-    def fresh(self, user_id: int) -> bool:
-        seen_at = self._seen.get(user_id)
+    def fresh(self, user_id: int, nonce: str) -> bool:
+        seen_at = self._seen.get((user_id, nonce))
         return seen_at is not None and self._time() - seen_at < self.ttl_seconds
 
-    def remember(self, user_id: int) -> None:
-        self._seen[user_id] = self._time()
+    def remember(self, user_id: int, nonce: str) -> None:
+        self._seen[(user_id, nonce)] = self._time()
+
+    def forget(self, user_id: int) -> None:
+        """Drop every cached pair for ``user_id`` (its nonce just changed)."""
+        for key in [k for k in self._seen if k[0] == user_id]:
+            del self._seen[key]
 
     def clear(self) -> None:
         """Drop everything (test hook)."""
@@ -126,7 +136,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self._serializer = make_serializer(secret_key)
         self._max_age_seconds = max_age_seconds
 
-    def _read_user_id(self, request: Request) -> int | None:
+    def _read_session(self, request: Request) -> tuple[int, str] | None:
         raw = request.cookies.get(self.cookie_name)
         if not raw:
             return None
@@ -142,24 +152,28 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # bool is an int subclass; a forged True must not mean user 1.
         if not isinstance(user_id, int) or isinstance(user_id, bool):
             return None
-        return user_id
+        nonce = payload.get("nonce")
+        if not isinstance(nonce, str) or not nonce:
+            return None
+        return user_id, nonce
 
-    async def _user_exists(self, request: Request, user_id: int) -> bool:
-        if user_exists_cache.fresh(user_id):
+    async def _session_matches(self, request: Request, user_id: int, nonce: str) -> bool:
+        if user_exists_cache.fresh(user_id, nonce):
             return True
         async with request.app.state.sessionmaker() as s:
             found = (await s.execute(
-                select(User.id).where(User.id == user_id))).scalar_one_or_none()
+                select(User.id).where(User.id == user_id,
+                                      User.session_nonce == nonce))).scalar_one_or_none()
         if found is None:
             return False
-        user_exists_cache.remember(user_id)
+        user_exists_cache.remember(user_id, nonce)
         return True
 
     async def _session_user_id(self, request: Request) -> int | None:
-        user_id = self._read_user_id(request)
-        if user_id is None or not await self._user_exists(request, user_id):
+        session = self._read_session(request)
+        if session is None or not await self._session_matches(request, *session):
             return None
-        return user_id
+        return session[0]
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path

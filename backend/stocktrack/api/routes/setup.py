@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from stocktrack.api.auth_middleware import user_exists_cache
 from stocktrack.api.deps import get_session
 from stocktrack.api.rate_limit import limiter
 from stocktrack.models import User
@@ -57,4 +58,6 @@ async def setup(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (WeakPasswordError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # A new user means any cached session from a deleted one is stale now.
+    user_exists_cache.clear()
     return SetupResponse(user_id=user.id, username=user.username)

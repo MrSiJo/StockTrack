@@ -26,12 +26,14 @@ async def authenticate(client, sessionmaker, username: str = "tester") -> int:
     from stocktrack.models import User
 
     async with sessionmaker() as s:
-        # The middleware only checks the row exists; skip argon2 per test.
+        # The middleware only checks the (id, nonce) row exists; skip argon2 per test.
         user = User(username=username, password_hash="unused")
         s.add(user)
         await s.commit()
         user_id = user.id
-    token = make_serializer(get_settings().app_secret_key).dumps({"user_id": user_id})
+        nonce = user.session_nonce
+    token = make_serializer(get_settings().app_secret_key).dumps(
+        {"user_id": user_id, "nonce": nonce})
     csrf = secrets.token_urlsafe(32)
     client.cookies.set(SESSION_COOKIE_NAME, token)
     client.cookies.set(CSRF_COOKIE_NAME, csrf)

@@ -1,14 +1,19 @@
-"""Login (signs the session cookie), logout (clears it) and who am I."""
+"""Login (signs the session cookie), logout (ends every session) and who am I."""
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from stocktrack.api.auth_middleware import SESSION_COOKIE_NAME, make_serializer
+from stocktrack.api.auth_middleware import (
+    SESSION_COOKIE_NAME,
+    make_serializer,
+    user_exists_cache,
+)
 from stocktrack.api.deps import get_session
 from stocktrack.api.login_throttle import login_throttle
 from stocktrack.api.rate_limit import limiter
 from stocktrack.bootstrap import get_settings
 from stocktrack.models import User
+from stocktrack.models.user import new_session_nonce
 from stocktrack.services.auth_service import authenticate
 
 router = APIRouter(prefix="/auth")
@@ -50,7 +55,8 @@ async def login(
         raise HTTPException(status_code=401, detail="invalid credentials")
 
     login_throttle.reset(body.username)
-    token = make_serializer(settings.app_secret_key).dumps({"user_id": user.id})
+    token = make_serializer(settings.app_secret_key).dumps(
+        {"user_id": user.id, "nonce": user.session_nonce})
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
@@ -64,8 +70,17 @@ async def login(
 
 
 @router.post("/logout")
-async def logout(response: Response) -> dict[str, bool]:
+async def logout(request: Request, response: Response,
+                 session: AsyncSession = Depends(get_session)) -> dict[str, bool]:
+    """Rotate the user's session nonce, so every cookie issued so far (this
+    browser's and any other's) stops working, then clear this browser's."""
     settings = get_settings()
+    user_id = getattr(request.state, "user_id", None)
+    user = await session.get(User, user_id) if user_id is not None else None
+    if user is not None:
+        user.session_nonce = new_session_nonce()
+        await session.commit()
+        user_exists_cache.forget(user.id)
     response.delete_cookie(key=SESSION_COOKIE_NAME, path="/", httponly=True,
                            samesite="strict", secure=settings.cookie_secure)
     return {"ok": True}

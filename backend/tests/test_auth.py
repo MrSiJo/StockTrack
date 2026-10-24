@@ -32,6 +32,16 @@ async def _make_user(sm, username="admin"):
         return (await bootstrap_user(s, username, PW)).id
 
 
+async def _nonce(sm, uid):
+    async with sm() as s:
+        return (await s.get(User, uid)).session_nonce
+
+
+async def _cookie(sm, uid, key=KEY):
+    """A validly signed session cookie for ``uid`` in the current format."""
+    return make_serializer(key).dumps({"user_id": uid, "nonce": await _nonce(sm, uid)})
+
+
 async def _login(c, username="admin", password=PW):
     await c.get("/api/setup")  # primes the CSRF cookie
     return await c.post("/api/auth/login",
@@ -134,7 +144,7 @@ async def test_me_unauthenticated_is_401(anon_client):
 
 async def test_tampered_cookie_is_401(anon_client, sessionmaker_):
     uid = await _make_user(sessionmaker_)
-    good = make_serializer(KEY).dumps({"user_id": uid})
+    good = await _cookie(sessionmaker_, uid)
     anon_client.cookies.set(SESSION_COOKIE_NAME, good[:-2] + "xx")
     assert (await anon_client.get("/api/auth/me")).status_code == 401
 
@@ -142,7 +152,7 @@ async def test_tampered_cookie_is_401(anon_client, sessionmaker_):
 async def test_cookie_signed_with_another_key_is_401(anon_client, sessionmaker_):
     uid = await _make_user(sessionmaker_)
     anon_client.cookies.set(SESSION_COOKIE_NAME,
-                            make_serializer("o" * 32).dumps({"user_id": uid}))
+                            await _cookie(sessionmaker_, uid, key="o" * 32))
     assert (await anon_client.get("/api/auth/me")).status_code == 401
 
 
@@ -152,18 +162,20 @@ async def test_session_expires_server_side(anon_client, sessionmaker_):
     from itsdangerous.timed import TimestampSigner
     uid = await _make_user(sessionmaker_)
     eight_days_ago = int(time.time()) - 8 * 24 * 3600
+    nonce = await _nonce(sessionmaker_, uid)
     with patch.object(TimestampSigner, "get_timestamp", return_value=eight_days_ago):
-        old = make_serializer(KEY).dumps({"user_id": uid})
+        old = make_serializer(KEY).dumps({"user_id": uid, "nonce": nonce})
     anon_client.cookies.set(SESSION_COOKIE_NAME, old)
     assert (await anon_client.get("/api/auth/me")).status_code == 401
 
-    fresh = make_serializer(KEY).dumps({"user_id": uid})
+    fresh = await _cookie(sessionmaker_, uid)
     anon_client.cookies.set(SESSION_COOKIE_NAME, fresh)
     assert (await anon_client.get("/api/auth/me")).status_code == 200
 
 
 async def test_payload_without_int_user_id_is_401(anon_client):
-    for payload in ({"user_id": "1"}, {"other": 1}, [1]):
+    for payload in ({"user_id": "1", "nonce": "n"}, {"other": 1}, [1],
+                    {"user_id": True, "nonce": "n"}):
         anon_client.cookies.set(SESSION_COOKIE_NAME, make_serializer(KEY).dumps(payload))
         assert (await anon_client.get("/api/auth/me")).status_code == 401
 
@@ -184,13 +196,114 @@ async def test_valid_cookie_for_deleted_user_is_401(client, sessionmaker_):
 def test_user_exists_cache_expires():
     now = [1000.0]
     cache = UserExistsCache(ttl_seconds=30, time_func=lambda: now[0])
-    assert not cache.fresh(1)
-    cache.remember(1)
-    assert cache.fresh(1)
+    assert not cache.fresh(1, "n")
+    cache.remember(1, "n")
+    assert cache.fresh(1, "n")
+    assert not cache.fresh(1, "other")
     now[0] += 29
-    assert cache.fresh(1)
+    assert cache.fresh(1, "n")
     now[0] += 2
-    assert not cache.fresh(1)
+    assert not cache.fresh(1, "n")
+
+
+def test_user_exists_cache_forget_drops_every_nonce_for_the_user():
+    cache = UserExistsCache()
+    cache.remember(1, "a")
+    cache.remember(1, "b")
+    cache.remember(2, "c")
+    cache.forget(1)
+    assert not cache.fresh(1, "a") and not cache.fresh(1, "b")
+    assert cache.fresh(2, "c")
+
+
+async def test_cookie_without_a_nonce_is_401(anon_client, sessionmaker_):
+    """The old payload format (user id only) no longer authenticates."""
+    uid = await _make_user(sessionmaker_)
+    anon_client.cookies.set(SESSION_COOKIE_NAME, make_serializer(KEY).dumps({"user_id": uid}))
+    assert (await anon_client.get("/api/auth/me")).status_code == 401
+    for bad in (None, 1, ""):
+        anon_client.cookies.set(SESSION_COOKIE_NAME,
+                                make_serializer(KEY).dumps({"user_id": uid, "nonce": bad}))
+        assert (await anon_client.get("/api/auth/me")).status_code == 401
+
+
+async def test_cookie_with_the_wrong_nonce_is_401(anon_client, sessionmaker_):
+    uid = await _make_user(sessionmaker_)
+    anon_client.cookies.set(SESSION_COOKIE_NAME,
+                            make_serializer(KEY).dumps({"user_id": uid, "nonce": "guess"}))
+    assert (await anon_client.get("/api/auth/me")).status_code == 401
+
+
+async def test_each_user_gets_a_random_session_nonce(sessionmaker_):
+    uid = await _make_user(sessionmaker_)
+    nonce = await _nonce(sessionmaker_, uid)
+    assert isinstance(nonce, str) and len(nonce) >= 16
+    async with sessionmaker_() as s:
+        await s.execute(delete(User))
+        await s.commit()
+    assert await _nonce(sessionmaker_, await _make_user(sessionmaker_)) != nonce
+
+
+async def test_session_dies_after_delete_and_re_setup(anon_client, sessionmaker_):
+    """SQLite would hand the re-created user id 1 again; the nonce (and
+    AUTOINCREMENT) stop an old cookie from logging into the new account."""
+    old_uid = await _make_user(sessionmaker_)
+    old_cookie = await _cookie(sessionmaker_, old_uid)
+    anon_client.cookies.set(SESSION_COOKIE_NAME, old_cookie)
+    assert (await anon_client.get("/api/auth/me")).status_code == 200  # cached now
+
+    async with sessionmaker_() as s:
+        await s.execute(delete(User))
+        await s.commit()
+    anon_client.cookies.delete(SESSION_COOKIE_NAME)
+    await anon_client.get("/api/setup")  # primes the CSRF cookie
+    r = await anon_client.post("/api/setup", json={"username": "admin", "password": PW},
+                               headers=csrf_headers(anon_client))
+    assert r.status_code == 201, r.text
+    assert r.json()["user_id"] != old_uid  # AUTOINCREMENT: ids are never reused
+
+    anon_client.cookies.set(SESSION_COOKIE_NAME, old_cookie)
+    assert (await anon_client.get("/api/auth/me")).status_code == 401
+
+
+async def test_old_cookie_with_reused_id_and_old_nonce_is_401(anon_client, sessionmaker_):
+    """Even if a re-created user did get the old id, the old nonce fails."""
+    uid = await _make_user(sessionmaker_)
+    old_cookie = await _cookie(sessionmaker_, uid)
+    async with sessionmaker_() as s:
+        await s.execute(delete(User))
+        await s.commit()
+        s.add(User(id=uid, username="admin", password_hash="unused"))
+        await s.commit()
+    user_exists_cache.clear()
+    anon_client.cookies.set(SESSION_COOKIE_NAME, old_cookie)
+    assert (await anon_client.get("/api/auth/me")).status_code == 401
+
+
+async def test_logout_kills_the_old_cookie_server_side(anon_client, sessionmaker_):
+    await _make_user(sessionmaker_)
+    assert (await _login(anon_client)).status_code == 200
+    stolen = anon_client.cookies.get(SESSION_COOKIE_NAME)
+    assert (await anon_client.get("/api/auth/me")).status_code == 200  # cached now
+    r = await anon_client.post("/api/auth/logout", headers=csrf_headers(anon_client))
+    assert r.status_code == 200
+    anon_client.cookies.set(SESSION_COOKIE_NAME, stolen)
+    assert (await anon_client.get("/api/auth/me")).status_code == 401
+
+
+async def test_logout_ends_every_session_for_the_user(sessionmaker_, app):
+    """Single user app: sign out on one browser signs out all of them."""
+    from httpx import ASGITransport, AsyncClient
+    await _make_user(sessionmaker_)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as a, \
+            AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as b:
+        assert (await _login(a)).status_code == 200
+        assert (await _login(b)).status_code == 200
+        assert (await b.get("/api/auth/me")).status_code == 200
+        assert (await a.post("/api/auth/logout", headers=csrf_headers(a))).status_code == 200
+        assert (await b.get("/api/auth/me")).status_code == 401
+        assert (await _login(b)).status_code == 200  # signing in again works
+        assert (await b.get("/api/auth/me")).status_code == 200
 
 
 def test_user_exists_cache_ttl_is_short():
