@@ -16,6 +16,14 @@ function OfferPrice({ price }: { price: number | null | undefined }) {
   return <>£{price.toFixed(2)}</>
 }
 
+// A plugin's extra fields, shown as is: "key: value" per line.
+export function extraLines(extra: Record<string, string> | undefined): string {
+  return Object.entries(extra ?? {})
+    .filter(([, v]) => v !== '')
+    .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`)
+    .join('\n')
+}
+
 const TH =
   'px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500'
 const COLS = 5
@@ -194,6 +202,15 @@ function VariantBlock({
               </a>
             ) : (
               p.seller || p.title
+            )}
+            {extraLines(p.extra) && (
+              <span
+                className="ml-1 cursor-help text-xs text-gray-400"
+                title={extraLines(p.extra)}
+                aria-label="Details"
+              >
+                ⓘ
+              </span>
             )}
           </td>
           <td className="px-3 py-2 tabular-nums text-sm text-gray-600">

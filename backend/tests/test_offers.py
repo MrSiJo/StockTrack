@@ -421,3 +421,4 @@ async def test_quoted_offers_through_the_api(client, sessionmaker_):
     prods = {p["seller"]: p for w in status for p in w["products"] if p["seller"]}
     assert prods["Dozey"]["price_new_customer"] == 250.0
     assert prods["Dozey"]["list_price"] is None and "price_audience" in prods["Dozey"]
+    assert prods["Dozey"]["extra"] == {"delivery_days": "3"} and "extra_json" not in prods["Dozey"]

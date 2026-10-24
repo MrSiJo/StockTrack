@@ -30,6 +30,7 @@ export interface Product {
   seller?: string
   seller_rating?: number | null
   price_audience?: string
+  extra?: Record<string, string> // plugin notes, shown as is
   list_price?: number | null
   price_new_customer?: number | null
   price_returning_customer?: number | null
