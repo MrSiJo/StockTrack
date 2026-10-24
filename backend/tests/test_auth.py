@@ -4,12 +4,8 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy import delete
 
-from stocktrack.api.auth_middleware import (
-    SESSION_COOKIE_NAME,
-    UserExistsCache,
-    make_serializer,
-    user_exists_cache,
-)
+from stocktrack.api import auth_middleware
+from stocktrack.api.auth_middleware import SESSION_COOKIE_NAME, make_serializer
 from stocktrack.api.login_throttle import login_throttle
 from stocktrack.models import User
 from stocktrack.services.auth_service import bootstrap_user
@@ -187,34 +183,17 @@ async def test_valid_cookie_for_deleted_user_is_401(client, sessionmaker_):
     async with sessionmaker_() as s:
         await s.execute(delete(User))
         await s.commit()
-    user_exists_cache.clear()  # production waits out the short TTL instead
     r = await client.get("/api/watches")
     assert r.status_code == 401
     assert r.json() == {"detail": "Authentication required"}
 
 
-def test_user_exists_cache_expires():
-    now = [1000.0]
-    cache = UserExistsCache(ttl_seconds=30, time_func=lambda: now[0])
-    assert not cache.fresh(1, "n")
-    cache.remember(1, "n")
-    assert cache.fresh(1, "n")
-    assert not cache.fresh(1, "other")
-    now[0] += 29
-    assert cache.fresh(1, "n")
-    now[0] += 2
-    assert not cache.fresh(1, "n")
-
-
-def test_user_exists_cache_forget_drops_every_nonce_for_the_user():
-    cache = UserExistsCache()
-    cache.remember(1, "a")
-    cache.remember(1, "b")
-    cache.remember(2, "c")
-    cache.forget(1)
-    assert not cache.fresh(1, "a") and not cache.fresh(1, "b")
-    assert cache.fresh(2, "c")
-
+def test_there_is_no_positive_session_cache():
+    """Every request looks the (id, nonce) pair up. A cache raced sign out:
+    a lookup begun before the nonce rotation could store the old pair after
+    the rotation, keeping the old cookie alive for the cache TTL."""
+    assert not hasattr(auth_middleware, "UserExistsCache")
+    assert not hasattr(auth_middleware, "user_exists_cache")
 
 async def test_cookie_without_a_nonce_is_401(anon_client, sessionmaker_):
     """The old payload format (user id only) no longer authenticates."""
@@ -250,7 +229,7 @@ async def test_session_dies_after_delete_and_re_setup(anon_client, sessionmaker_
     old_uid = await _make_user(sessionmaker_)
     old_cookie = await _cookie(sessionmaker_, old_uid)
     anon_client.cookies.set(SESSION_COOKIE_NAME, old_cookie)
-    assert (await anon_client.get("/api/auth/me")).status_code == 200  # cached now
+    assert (await anon_client.get("/api/auth/me")).status_code == 200
 
     async with sessionmaker_() as s:
         await s.execute(delete(User))
@@ -275,7 +254,6 @@ async def test_old_cookie_with_reused_id_and_old_nonce_is_401(anon_client, sessi
         await s.commit()
         s.add(User(id=uid, username="admin", password_hash="unused"))
         await s.commit()
-    user_exists_cache.clear()
     anon_client.cookies.set(SESSION_COOKIE_NAME, old_cookie)
     assert (await anon_client.get("/api/auth/me")).status_code == 401
 
@@ -284,7 +262,7 @@ async def test_logout_kills_the_old_cookie_server_side(anon_client, sessionmaker
     await _make_user(sessionmaker_)
     assert (await _login(anon_client)).status_code == 200
     stolen = anon_client.cookies.get(SESSION_COOKIE_NAME)
-    assert (await anon_client.get("/api/auth/me")).status_code == 200  # cached now
+    assert (await anon_client.get("/api/auth/me")).status_code == 200
     r = await anon_client.post("/api/auth/logout", headers=csrf_headers(anon_client))
     assert r.status_code == 200
     anon_client.cookies.set(SESSION_COOKIE_NAME, stolen)
@@ -304,7 +282,3 @@ async def test_logout_ends_every_session_for_the_user(sessionmaker_, app):
         assert (await b.get("/api/auth/me")).status_code == 401
         assert (await _login(b)).status_code == 200  # signing in again works
         assert (await b.get("/api/auth/me")).status_code == 200
-
-
-def test_user_exists_cache_ttl_is_short():
-    assert user_exists_cache.ttl_seconds <= 30

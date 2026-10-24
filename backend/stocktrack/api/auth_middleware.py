@@ -6,9 +6,10 @@ a session expires server side and not only in the browser. The payload is
 ``{"user_id": <int>, "nonce": <str>}``.
 
 Beyond the fleet template, the cookie's (user id, nonce) pair must still match
-a ``user`` row: a deleted user's sessions stop working (within
-``UserExistsCache``'s short TTL) without rotating APP_SECRET_KEY, which would
-also orphan the Gotify token. The nonce is random per user, so a user deleted
+a ``user`` row, looked up on every request (one primary key read; no cache, so
+a delete or sign out takes effect on the very next request): a deleted user's
+sessions stop working without rotating APP_SECRET_KEY, which would also orphan
+the Gotify token. The nonce is random per user, so a user deleted
 and set up again never inherits the old sessions, and sign out rotates it to
 end every session for the user at once. A cookie without a nonce (the first
 payload format) is refused.
@@ -29,8 +30,7 @@ updated.
 """
 import logging
 import re
-import time
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from sqlalchemy import select
@@ -85,40 +85,6 @@ def make_serializer(secret_key: str) -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(secret_key, salt=SESSION_SALT)
 
 
-class UserExistsCache:
-    """Remembers, briefly, that a session's (user id, nonce) pair matches a row.
-
-    Positive results only, so a deleted user is refused at most
-    ``ttl_seconds`` after the delete. Saves one indexed lookup per request.
-    Sign out calls ``forget`` so a rotated nonce takes effect immediately.
-    """
-
-    def __init__(self, ttl_seconds: float = 30,
-                 time_func: Callable[[], float] = time.monotonic) -> None:
-        self.ttl_seconds = ttl_seconds
-        self._time = time_func
-        self._seen: dict[tuple[int, str], float] = {}
-
-    def fresh(self, user_id: int, nonce: str) -> bool:
-        seen_at = self._seen.get((user_id, nonce))
-        return seen_at is not None and self._time() - seen_at < self.ttl_seconds
-
-    def remember(self, user_id: int, nonce: str) -> None:
-        self._seen[(user_id, nonce)] = self._time()
-
-    def forget(self, user_id: int) -> None:
-        """Drop every cached pair for ``user_id`` (its nonce just changed)."""
-        for key in [k for k in self._seen if k[0] == user_id]:
-            del self._seen[key]
-
-    def clear(self) -> None:
-        """Drop everything (test hook)."""
-        self._seen.clear()
-
-
-user_exists_cache = UserExistsCache()
-
-
 class AuthMiddleware(BaseHTTPMiddleware):
     """Validates the signed session cookie on non exempt paths."""
 
@@ -158,16 +124,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return user_id, nonce
 
     async def _session_matches(self, request: Request, user_id: int, nonce: str) -> bool:
-        if user_exists_cache.fresh(user_id, nonce):
-            return True
         async with request.app.state.sessionmaker() as s:
             found = (await s.execute(
                 select(User.id).where(User.id == user_id,
                                       User.session_nonce == nonce))).scalar_one_or_none()
-        if found is None:
-            return False
-        user_exists_cache.remember(user_id, nonce)
-        return True
+        return found is not None
 
     async def _session_user_id(self, request: Request) -> int | None:
         session = self._read_session(request)

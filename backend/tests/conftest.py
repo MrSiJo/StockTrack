@@ -58,7 +58,6 @@ async def app(sessionmaker_):
     httpx's ASGITransport does NOT trigger the ASGI lifespan, so we inject
     app.state.sessionmaker directly rather than relying on the lifespan to do it.
     """
-    from stocktrack.api.auth_middleware import user_exists_cache
     from stocktrack.api.login_throttle import login_throttle
     from stocktrack.api.rate_limit import limiter
     from stocktrack.bootstrap import get_settings
@@ -67,7 +66,6 @@ async def app(sessionmaker_):
     get_settings.cache_clear()
     limiter.reset()
     login_throttle.clear()
-    user_exists_cache.clear()
     application = create_app()
     # Inject the test sessionmaker directly — routes read it via request.app.state
     application.state.sessionmaker = sessionmaker_

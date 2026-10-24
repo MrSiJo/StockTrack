@@ -3,11 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from stocktrack.api.auth_middleware import (
-    SESSION_COOKIE_NAME,
-    make_serializer,
-    user_exists_cache,
-)
+from stocktrack.api.auth_middleware import SESSION_COOKIE_NAME, make_serializer
 from stocktrack.api.deps import get_session
 from stocktrack.api.login_throttle import login_throttle
 from stocktrack.api.rate_limit import limiter
@@ -80,7 +76,6 @@ async def logout(request: Request, response: Response,
     if user is not None:
         user.session_nonce = new_session_nonce()
         await session.commit()
-        user_exists_cache.forget(user.id)
     response.delete_cookie(key=SESSION_COOKIE_NAME, path="/", httponly=True,
                            samesite="strict", secure=settings.cookie_secure)
     return {"ok": True}
