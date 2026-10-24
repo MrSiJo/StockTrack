@@ -18,6 +18,7 @@ from stocktrack.services.heartbeat import heartbeat_tick
 from stocktrack.services.plugin_alert import plugin_alert
 from stocktrack.services.poller import check_watch
 from stocktrack.services.retention import retention_tick
+from stocktrack.services.auth_service import warm_dummy_hash
 from stocktrack.services.settings_service import get as get_setting, gotify_config, seed_from_env
 
 log = logging.getLogger("stocktrack")
@@ -118,6 +119,7 @@ async def lifespan(app: FastAPI):
     engine = make_engine(env.database_url)
     await init_models(engine)
     sm = make_sessionmaker(engine)
+    warm_dummy_hash()
     async with sm() as s:
         await seed_from_env(s, env, env.app_secret_key)
         await seed_default_watches(s)
@@ -165,6 +167,11 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     from fastapi.middleware.cors import CORSMiddleware
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+
+    from stocktrack.api.rate_limit import limiter
+    from stocktrack.api.routes.setup import router as setup_router
     from stocktrack.api.routes.events import router as events_router
     from stocktrack.api.routes.history import router as history_router
     from stocktrack.api.routes.offers import router as offers_router
@@ -177,6 +184,8 @@ def create_app() -> FastAPI:
     from stocktrack.api.routes.watches import router as watches_router
 
     app = FastAPI(title="StockTrack", lifespan=lifespan)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     app.add_middleware(
         CORSMiddleware,
@@ -190,6 +199,7 @@ def create_app() -> FastAPI:
     async def health():
         return {"status": "ok"}
 
+    app.include_router(setup_router, prefix="/api")
     app.include_router(status_router, prefix="/api")
     app.include_router(plugins_router, prefix="/api")
     app.include_router(events_router, prefix="/api")
