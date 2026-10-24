@@ -140,3 +140,8 @@ A watch over a page like this can have many products, so you will usually want
 it **quiet** (`"quiet": true` on create or update): every alert is recorded as
 if it had been delivered, but nothing is pushed. The digest and the two
 endpoints above still see everything.
+
+Another service can read offers without a login: `GET /api/watches` (to find the
+watch), `/offers` and `/offer-changes` are exactly the endpoints a read only
+API token may call, sent as `Authorization: Bearer st_...`. See
+[API tokens for other services](./deployment.md#api-tokens-for-other-services).
