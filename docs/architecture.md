@@ -127,15 +127,21 @@ over `(events, now)`, so it is unit-tested without a DB or network.
 SQLAlchemy models in `backend/stocktrack/models/`:
 
 - **Watch** — one store listing to poll: `store`, `url`, include/exclude
-  filters, `enabled`, plus scraping-health columns (`last_checked_at`,
+  filters, `enabled`, `quiet` (record alerts without pushing them), plus scraping-health columns (`last_checked_at`,
   `last_ok_at`, `consecutive_failures`, `last_error`).
 - **Product** — one SKU under a watch (unique on `watch_id + code`). Carries
   the current `availability` phase, `current_in_stock`, `current_price`,
   `basket_url`, and `available_since` (when the current buyable spell began).
+  Offer listings also fill `variant`, `seller`, `seller_rating`,
+  `discounts_json` and `extra_json` (see [plugins](plugins.md#offers-plugin-api-2)).
 - **Event** — an immutable transition row: `kind` ∈ `early_access` / `public`
   / `oos` / `new_product` / `lead_time`, `ts`, `price`, and `available_seconds`
   (on `oos` events). `new_product` and `lead_time` are informational — history
   reconstruction only consumes `early_access`, `public`, and `oos`.
+- **ProductChange** — a silent record of a product's `price` or `discounts`
+  changing between polls (`field`, `old`, `new`, `ts`). Nothing here is
+  pushed, so it sits outside the delivery safe rules; it feeds the offers
+  change summary and the digest. Pruned with `event_retention_days`.
 - **Setting** — a key/value store for runtime config. Secret values (the
   Gotify token) are stored Fernet-encrypted; `is_secret` flags them.
 

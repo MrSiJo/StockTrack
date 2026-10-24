@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
 
-from stocktrack.models import Event
+from stocktrack.models import Event, ProductChange
 from stocktrack.services.history import build_episodes
 from stocktrack.services.settings_service import get as get_setting
 
@@ -55,6 +55,17 @@ async def prune_old_events(session, retention_days: int, now=None) -> int:
     return len(doomed)
 
 
+async def prune_old_changes(session, retention_days: int, now=None) -> int:
+    """Delete silent price and discount change rows older than the window."""
+    if retention_days <= 0:
+        return 0
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=retention_days)
+    res = await session.execute(
+        delete(ProductChange).where(ProductChange.ts < cutoff))
+    return res.rowcount or 0
+
+
 async def retention_tick(sessionmaker) -> None:
     """Scheduler entry point: prune per the DB-owned retention setting."""
     async with sessionmaker() as s:
@@ -62,6 +73,7 @@ async def retention_tick(sessionmaker) -> None:
         if days <= 0:
             return
         n = await prune_old_events(s, days)
+        await prune_old_changes(s, days)
         await s.commit()
         if n:
             log.info("retention sweep deleted %d events older than %dd", n, days)

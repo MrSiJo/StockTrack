@@ -16,6 +16,8 @@ class Watch(Base):
     kind: Mapped[str] = mapped_column(default="listing")
     track_price_drops: Mapped[bool] = mapped_column(default=False)
     track_price_rises: Mapped[bool] = mapped_column(default=False)
+    # Record every alert as delivered but never push it (like a muted product)
+    quiet: Mapped[bool] = mapped_column(default=False)
     # Optional per-watch overrides of the global price_drop_min_* settings,
     # and an absolute "alert when price reaches X" target.
     price_drop_min_pct: Mapped[Optional[float]] = mapped_column(default=None)

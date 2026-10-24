@@ -4,7 +4,7 @@ import os
 import shutil
 import subprocess
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 log = logging.getLogger(__name__)
@@ -32,6 +32,20 @@ DEFAULT_HEADERS = {
     "Cache-Control": "no-cache",
 }
 
+DISCOUNT_AUDIENCES = ("any", "new_customer", "returning_customer")
+
+
+@dataclass
+class Discount:
+    """A voucher or offer on a product. Set one of ``amount`` (currency units
+    off) or ``percent``. ``audience`` says who can use it."""
+    audience: str = "any"
+    amount: Optional[float] = None
+    percent: Optional[float] = None
+    code: str = ""
+    text: str = ""
+
+
 @dataclass
 class Product:
     code: str
@@ -43,6 +57,15 @@ class Product:
     url: str = ""
     availability: str = ""
     basket_url: str = ""
+    # Plugin API 2: pages that list one item from several sellers, in several
+    # variants. ``variant`` is a free label core never parses. ``discounts``
+    # None means unknown; [] means the seller lists none. ``extra`` is shown
+    # as is and never interpreted.
+    variant: str = ""
+    seller: str = ""
+    seller_rating: Optional[float] = None
+    discounts: Optional[list[Discount]] = None
+    extra: dict[str, str] = field(default_factory=dict)
 
 class SiteHandler:
     name = "base"

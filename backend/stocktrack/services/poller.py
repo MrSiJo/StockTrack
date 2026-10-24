@@ -9,6 +9,7 @@ from stocktrack.dateparse import parse_delivery_date
 from stocktrack.models import Event, Product
 from stocktrack.services import gotify
 from stocktrack.services.notify_format import fmt_price, human_duration, md_lines
+from stocktrack.services.offers import apply_offer_fields
 from stocktrack.services.settings_service import get as get_setting
 from stocktrack.services.settings_service import gotify_config, truthy
 from stocktrack.services.specs import parse_watts
@@ -240,10 +241,11 @@ def _group_link(a: "PendingAlert") -> str:
 
 
 async def _dispatch(pending, cfg, sender, threshold, store, now,
-                    dashboard_url="") -> None:
+                    dashboard_url="", quiet=False) -> None:
     """Send staged alerts and run each one's success/failure closure.
 
-    Muted products advance state silently (no push). When a tick stages
+    Muted products, and every product of a quiet watch, advance state
+    silently (no push). When a tick stages
     ``threshold``-or-more sendable alerts (0 disables grouping) they collapse
     into one grouped push whose delivery outcome applies to all of them. The
     grouped body lists each product as a markdown link; the notification-level
@@ -252,7 +254,7 @@ async def _dispatch(pending, cfg, sender, threshold, store, now,
     sendable = []
     for a in pending:
         muted_until = _utc(getattr(a.row, "muted_until", None))
-        if muted_until is not None and now < muted_until:
+        if quiet or (muted_until is not None and now < muted_until):
             a.on_success()
         else:
             sendable.append(a)
@@ -351,6 +353,7 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
                 row.archived_at = None
             row.price_ref = p.price
             row.lowest_price = p.price
+            await apply_offer_fields(session, row, p, now, record=False)
             row.availability = curr
             row.current_in_stock = curr != "oos"
             row.available_since = now if curr != "oos" else None
@@ -370,6 +373,7 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
                 row.archived_at = None
             row.price_ref = p.price
             row.lowest_price = p.price
+            await apply_offer_fields(session, row, p, now, record=False)
             row.availability = "oos"
             row.current_in_stock = False
             row.available_since = None
@@ -411,6 +415,7 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
         row.spec_watts = parse_watts(p.title)
         if row.archived_at is not None:
             row.archived_at = None
+        await apply_offer_fields(session, row, p, now, old_price=old_price, record=True)
 
         if curr == prev:
             # No phase change — just update availability and current_in_stock
@@ -657,7 +662,7 @@ async def _check_watch(session, watch, *, secret_key, handler=None,
 
     threshold = int(await get_setting(session, "alert_group_threshold", "3") or 3)
     await _dispatch(pending, cfg, sender, threshold, watch.store, now,
-                    dashboard_url=dashboard_url)
+                    dashboard_url=dashboard_url, quiet=bool(watch.quiet))
 
     # Addendum A: update watch health on success
     watch.last_checked_at = now

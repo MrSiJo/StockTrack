@@ -167,6 +167,7 @@ def create_app() -> FastAPI:
     from fastapi.middleware.cors import CORSMiddleware
     from stocktrack.api.routes.events import router as events_router
     from stocktrack.api.routes.history import router as history_router
+    from stocktrack.api.routes.offers import router as offers_router
     from stocktrack.api.routes.plugins import router as plugins_router
     from stocktrack.api.routes.products import router as products_router
     from stocktrack.api.routes.restock import router as restock_router
@@ -196,6 +197,7 @@ def create_app() -> FastAPI:
     app.include_router(products_router, prefix="/api")
     app.include_router(restock_router, prefix="/api")
     app.include_router(stores_router, prefix="/api")
+    app.include_router(offers_router, prefix="/api")
     app.include_router(watches_router, prefix="/api")
     app.include_router(settings_router, prefix="/api")
 

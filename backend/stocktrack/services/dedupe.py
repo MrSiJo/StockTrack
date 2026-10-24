@@ -1,12 +1,15 @@
 """One-off merge of case-insensitive duplicate products (re-casing artifact)."""
 from sqlalchemy import select
 
-from stocktrack.models import Event, Product
+from sqlalchemy import update
+
+from stocktrack.models import Event, Product, ProductChange
 
 # Survivor state fast-forwarded to the most-recently-seen duplicate row.
 _FAST_FORWARD_ATTRS = (
     "code", "title", "current_price", "current_in_stock", "availability",
     "delivery", "basket_url", "url", "last_seen", "last_checked", "spec_watts",
+    "variant", "seller", "seller_rating", "discounts_json", "extra_json",
 )
 
 
@@ -64,6 +67,10 @@ async def merge_duplicate_products(session, *, dry_run: bool = False) -> list[di
             # Delete the emptied duplicate rows and flush BEFORE fast-forwarding
             # the survivor's code. The (watch_id, code) unique constraint would
             # otherwise be violated while the newest row still holds that code.
+            await session.execute(
+                update(ProductChange)
+                .where(ProductChange.product_id.in_([p.id for p in removed]))
+                .values(product_id=survivor.id))
             for p in removed:
                 await session.delete(p)
             await session.flush()

@@ -165,7 +165,7 @@ def test_aobase_not_registered_as_store():
     from stocktrack.sites import available, stores
     from stocktrack.sites.ao import _AoBase
     avail = set(available())
-    assert avail == {"ao", "cityplumbing", "johnlewis"}
+    assert avail >= {"ao", "cityplumbing", "johnlewis"}  # private plugins may add more
     assert _AoBase().name not in avail
     store_names = {s["name"] for s in stores()}
-    assert store_names == {"ao", "cityplumbing", "johnlewis"}
+    assert store_names >= {"ao", "cityplumbing", "johnlewis"}

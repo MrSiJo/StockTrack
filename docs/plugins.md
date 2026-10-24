@@ -5,7 +5,7 @@ The built in ones live in `backend/stocktrack/sites/`. You can add your own, or
 replace a built in one, without rebuilding the image, by pointing
 `STOCKTRACK_PLUGINS_DIR` at a folder of plugin modules.
 
-## The contract (plugin API 1)
+## The contract (plugin API 2)
 
 A plugin module defines:
 
@@ -82,3 +82,51 @@ services:
 ```
 
 The container runs as uid 1001, so the files must be world readable.
+
+## Offers (plugin API 2)
+
+Some pages list the same item from several sellers, in several variants: a
+comparison page of mattresses where each seller offers Single, Double and King
+sizes, some with a voucher. A handler for such a page returns one `Product` per
+seller and variant and fills the optional offer fields:
+
+```python
+from .base import Discount, Product
+
+Product(
+    code="bedworks:double", title="Bedworks Double", in_stock=True,
+    price=300.0, url="https://example.test/bedworks",
+    variant="Double",                 # free label; core never parses it
+    seller="Bedworks", seller_rating=4.8,
+    discounts=[Discount("new_customer", amount=40, code="HELLO40"),
+               Discount("returning_customer", percent=10)],
+    extra={"delivery_days": "3"},     # shown as is, never interpreted
+)
+```
+
+* `Discount.audience` is `any`, `new_customer` or `returning_customer`; set one
+  of `amount` (currency units off) or `percent`.
+* `discounts=None` means unknown and `[]` means the seller lists none. Keep them
+  apart: an unknown discount must never read as "no discount".
+* All the fields are optional, so a plugin written for API 1 still loads.
+
+What core does with them:
+
+* Stores them on the product, and records a silent `ProductChange` row whenever
+  a price or the discounts change between polls.
+* `GET /api/watches/{id}/offers?variant=&min_rating=` returns the available
+  products grouped by variant (in first seen order), each group sorted by list
+  price. Each offer carries `price`, `price_new_customer` and
+  `price_returning_customer`: the list price less the single best discount for
+  that audience (or `any`), never below zero, and `null` when the discounts are
+  unknown.
+* `GET /api/watches/{id}/offer-changes?days=14` summarises, per variant, how
+  many price changes there were, across how many offers, the largest and mean
+  change, and how many discount changes, plus the change list itself.
+* The digest shows a watch with variants as one block per variant (the three
+  cheapest offers and a count of changes) instead of listing every product.
+
+A watch over a page like this can have many products, so you will usually want
+it **quiet** (`"quiet": true` on create or update): every alert is recorded as
+if it had been delivered, but nothing is pushed. The digest and the two
+endpoints above still see everything.
