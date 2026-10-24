@@ -1,0 +1,53 @@
+# Tests on pushes to any branch except main (deploy.yml runs them there), on
+# the self hosted Forgejo runner. Adapted from the ci-deploy template: the
+# backend lives in backend/ and the frontend has its own suite.
+name: ci
+
+on:
+  push:
+    branches-ignore: [main]
+  workflow_call:
+
+jobs:
+  backend:
+    runs-on: docker
+    container:
+      image: python:3.12-bookworm
+    steps:
+      - name: Check out
+        run: |
+          git clone -q --no-checkout "${{ vars.CI_FORGEJO_URL }}/${{ github.repository }}.git" src
+          git -C src checkout -q "${{ github.sha }}"
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: http.extraHeader
+          GIT_CONFIG_VALUE_0: "Authorization: token ${{ github.token }}"
+      - name: Install
+        working-directory: src/backend
+        run: pip install -q -r requirements.txt -r requirements-dev.txt ruff==0.9.10
+      - name: Lint
+        working-directory: src/backend
+        run: ruff check stocktrack tests
+      - name: Test
+        working-directory: src/backend
+        run: python -m pytest -q
+
+  frontend:
+    runs-on: docker
+    container:
+      image: node:22-bookworm
+    steps:
+      - name: Check out
+        run: |
+          git clone -q --no-checkout "${{ vars.CI_FORGEJO_URL }}/${{ github.repository }}.git" src
+          git -C src checkout -q "${{ github.sha }}"
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: http.extraHeader
+          GIT_CONFIG_VALUE_0: "Authorization: token ${{ github.token }}"
+      - name: Test and build
+        working-directory: src/frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npm run build
