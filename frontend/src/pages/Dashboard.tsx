@@ -322,6 +322,8 @@ function WatchGroup({
           products={watch.products}
           selected={prefs.variants}
           onSelect={(variants) => updatePrefs({ ...prefs, variants })}
+          minRating={prefs.minRating}
+          onMinRating={(minRating) => updatePrefs({ ...prefs, minRating })}
         />
       ) : (
       <div className="overflow-hidden rounded-b-lg border border-gray-200">

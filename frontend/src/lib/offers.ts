@@ -61,18 +61,35 @@ export function toggleVariant(selected: string[], variant: string): string[] {
     : [...selected, variant]
 }
 
+// Seller rating floors to offer as chips: each distinct rating present
+// (to one decimal), lowest first, at most `max` of the highest.
+export function ratingSteps(products: Product[], max = 4): number[] {
+  const set = new Set<number>()
+  for (const p of products) {
+    if (p.seller_rating != null) set.add(Math.floor(p.seller_rating * 10 + 1e-6) / 10)
+  }
+  return [...set].sort((a, b) => a - b).slice(-max)
+}
+
+// Products rated at least `min`; a null floor keeps everything.
+export function filterByRating(products: Product[], min: number | null): Product[] {
+  if (min == null) return products
+  return products.filter((p) => p.seller_rating != null && p.seller_rating >= min - 1e-6)
+}
+
 // Per viewer conveniences, kept in the browser. Storage can be missing or
 // throw (private windows, blocked site data), so every access is guarded and
 // the page works the same without it.
 export interface OfferViewPrefs {
   variants: string[]
   collapsed: boolean
+  minRating: number | null
 }
 
 const PREFS_KEY = (watchId: number) => `stocktrack.offers.${watchId}`
 
 export function loadPrefs(watchId: number): OfferViewPrefs {
-  const fallback = { variants: [], collapsed: false }
+  const fallback: OfferViewPrefs = { variants: [], collapsed: false, minRating: null }
   try {
     const raw = window.localStorage.getItem(PREFS_KEY(watchId))
     if (!raw) return fallback
@@ -82,6 +99,7 @@ export function loadPrefs(watchId: number): OfferViewPrefs {
         ? data.variants.filter((v: unknown) => typeof v === 'string')
         : [],
       collapsed: data.collapsed === true,
+      minRating: typeof data.minRating === 'number' ? data.minRating : null,
     }
   } catch {
     return fallback
