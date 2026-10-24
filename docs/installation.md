@@ -70,6 +70,7 @@ rest, so keep it stable: changing it invalidates the stored token.
 | `PRICE_DROP_MIN_ABS` | no | `5` | Minimum absolute price drop (£) to trigger a price-drop alert. |
 | `SEED_AO_URL` | no | — | Auto-seed an AO.com watch on first boot; blank to add via UI. |
 | `SEED_JL_URL` | no | — | Auto-seed a John Lewis watch on first boot; blank to add via UI. |
+| `STOCKTRACK_PLUGINS_DIR` | no | (unset) | Folder of extra or replacement store plugins, read at startup. See [plugins.md](./plugins.md). |
 
 Gotify and poller values seeded here are copied into the database on first
 boot; after that, edit them in the UI (Gotify / Watches settings). See

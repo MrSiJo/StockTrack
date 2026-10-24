@@ -40,6 +40,7 @@ via the **Watches** tab. Full walkthrough in [docs/setup.md](docs/setup.md).
 - **[Deployment & operations](docs/deployment.md)** — deploy, remote Docker hosts, data persistence, backups, updates, monitoring
 - **[First-run setup](docs/setup.md)** — adding watches, the 3-phase model, Gotify, history, adding a store
 - **[Architecture](docs/architecture.md)** — how it fits together: the stock model, delivery-safety, episode reconstruction, data model
+- **[Plugins](docs/plugins.md)**: add or replace store handlers from a mounted folder, without rebuilding the image
 
 ## Security
 

@@ -46,8 +46,9 @@ dev server on `:5173`).
   (`services/poller.py`). The per-watch `interval_seconds` is stored on the
   row but the scheduler currently drives all watches off the one global tick.
 - **Site handlers** — one `SiteHandler` subclass per store
-  (`sites/ao.py`, `sites/johnlewis.py`, `sites/cityplumbing.py`), registered
-  in `sites/__init__.py`.
+  (`sites/ao.py`, `sites/johnlewis.py`, `sites/cityplumbing.py`), discovered
+  by `sites/__init__.py`, plus any plugins from `STOCKTRACK_PLUGINS_DIR`
+  (see [plugins.md](./plugins.md)).
   Each maps a store's listing HTML/JSON to the shared `Product` dataclass. See
   [adding-a-store](./adding-a-store.md) for the handler contract and a checklist.
 - **Notifications** — a delivery-safe Gotify sender (`services/gotify.py`).
