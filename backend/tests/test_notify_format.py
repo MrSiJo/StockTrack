@@ -1,4 +1,9 @@
-from stocktrack.services.notify_format import fmt_price, human_duration, md_lines
+from stocktrack.services.notify_format import (
+    fmt_price,
+    human_duration,
+    md_lines,
+    md_paragraphs,
+)
 
 def test_fmt_price():
     assert fmt_price(519.0) == "£519.00"
@@ -17,8 +22,16 @@ def test_human_duration_none():
     assert human_duration(None) == ""
 
 def test_md_lines():
-    assert md_lines(["a", "", "b"]) == "a\nb"
+    # Two trailing spaces are a markdown hard break; a bare newline renders
+    # as a space and runs every line of a Gotify message together.
+    assert md_lines(["a", "", "b"]) == "a  \nb"
+    assert md_lines(["a"]) == "a"
     assert md_lines([]) == ""
+
+
+def test_md_paragraphs():
+    assert md_paragraphs([["a", "b"], [], ["c"]]) == "a  \nb\n\nc"
+    assert md_paragraphs([[], [""]]) == ""
 
 def test_human_duration_ladder():
     assert human_duration(30) == "30s"

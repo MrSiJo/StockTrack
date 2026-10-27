@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from stocktrack.models import Event, Product, Watch
 from stocktrack.services import gotify
-from stocktrack.services.notify_format import fmt_price, md_lines
+from stocktrack.services.notify_format import fmt_price, md_paragraphs
 from stocktrack.services.offers import (
     group_offers,
     has_variants,
@@ -50,19 +50,20 @@ def _offer_price_line(o: dict) -> str:
     return f"{name} " + ", ".join(f"{label} {fmt_price(v)}" for label, v in known)
 
 
-def _offer_blocks(watch, prods, summaries) -> list[str]:
+def _offer_blocks(watch, prods, summaries) -> list[list[str]]:
     """Variant watches: per variant the three cheapest offers and a count of
-    price and discount changes over the digest window."""
+    price and discount changes over the digest window, one block each."""
     by_variant = {s["variant"]: s for s in (summaries or [])}
-    lines = [f"**{watch.label or watch.store}**"]
+    blocks = [[f"**{watch.label or watch.store}**"]]
     groups = group_offers(prods)
     if not groups:
-        lines.append("No offers available right now.")
+        blocks[0].append("No offers available right now.")
     for g in groups:
         priced = [o for o in g["offers"] if o["price"] is not None]
         if not priced:
             continue
-        lines.append(f"*{g['variant'] or 'other'}*")
+        lines = [f"*{g['variant'] or 'other'}*"]
+        blocks.append(lines)
         for o in priced[:3]:
             # A trophy only once the price has come down from a higher one:
             # lowest_price starts at the first price seen.
@@ -76,7 +77,7 @@ def _offer_blocks(watch, prods, summaries) -> list[str]:
         if s is not None:
             lines.append(f"{s['price_changes']} price changes, "
                          f"{s['discount_changes']} discount changes")
-    return lines
+    return blocks
 
 
 def build_digest(watch_products, recent_events, now,
@@ -91,12 +92,12 @@ def build_digest(watch_products, recent_events, now,
     title = (f"📰 StockTrack digest — "
              f"{len(in_stock)}/{len(all_products)} in stock")
 
-    lines = []
+    blocks = []
     offer_watch_ids = set()
     for watch, prods in watch_products:
         if has_variants(prods):
             offer_watch_ids.add(watch.id)
-            lines.extend(_offer_blocks(watch, prods, offer_changes.get(watch.id)))
+            blocks.extend(_offer_blocks(watch, prods, offer_changes.get(watch.id)))
             continue
         buyable = sorted(
             (p for p in prods if _phase(p) != "oos"),
@@ -104,29 +105,30 @@ def build_digest(watch_products, recent_events, now,
         )
         if not buyable:
             continue
-        lines.append(f"**{watch.label or watch.store}**")
+        lines = [f"**{watch.label or watch.store}**"]
+        blocks.append(lines)
         for p in buyable:
             icon = "⚡" if _phase(p) == "early" else "🟢"
             price = f" — {fmt_price(p.current_price)}" if p.current_price is not None else ""
             low = (" 🏆" if p.current_price is not None
                    and p.current_price == p.lowest_price else "")
             lines.append(f"{icon} {p.title or p.code}{price}{low}")
-    if not lines:
-        lines.append("Nothing in stock right now.")
+    if not blocks:
+        blocks.append(["Nothing in stock right now."])
 
     # Offer watches are summarised above; their events would swamp this list.
     recent_events = [(e, p) for e, p in recent_events
                      if p.watch_id not in offer_watch_ids]
     if recent_events:
-        lines.append("")
-        lines.append("**Changes**")
+        lines = ["**Changes**"]
+        blocks.append(lines)
         for e, p in recent_events:
             icon = _KIND_ICONS.get(e.kind, "•")
             label = _KIND_LABELS.get(e.kind, e.kind)
             price = f" ({fmt_price(e.price)})" if e.price is not None else ""
             lines.append(f"{icon} {p.title or p.code}: {label}{price}")
 
-    return title, md_lines(lines)
+    return title, md_paragraphs(blocks)
 
 
 async def digest_tick(sessionmaker, secret_key: str, *, tz: str = "UTC",
