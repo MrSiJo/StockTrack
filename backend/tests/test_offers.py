@@ -350,8 +350,27 @@ def test_digest_trophy_only_after_a_real_drop():
     prods = [prod(1, "Steady", 100.0, 100.0, 100.0),
              prod(2, "Dropped", 90.0, 90.0, 120.0)]
     _, msg = build_digest([(w, prods)], [], T0, {})
-    lines = msg.splitlines()
+    lines = [ln.rstrip() for ln in msg.splitlines()]
     assert "• Steady £100.00" in lines and "• Dropped £90.00 🏆" in lines
+
+
+def test_digest_variant_blocks_are_separate_paragraphs():
+    w = Watch(id=1, store="fake", url="u", label="Mattresses")
+    def prod(pid, variant, price):
+        return Product(id=pid, watch_id=1, store="fake", code=f"s:{variant}",
+                       title="S", variant=variant, seller="Shop",
+                       current_price=price, lowest_price=price, price_ref=price,
+                       current_in_stock=True, first_seen=T0, last_seen=T0,
+                       discounts_json="[]", extra_json="")
+    _, msg = build_digest([(w, [prod(1, "King", 100.0), prod(2, "Double", 80.0)])],
+                          [], T0, {})
+    paras = msg.split("\n\n")
+    assert paras[0] == "**Mattresses**"
+    assert len(paras) == 3
+    assert all(p.startswith("*") for p in paras[1:])
+    # Every line inside a paragraph ends in a hard break except the last.
+    for p in paras:
+        assert all(ln.endswith("  ") for ln in p.split("\n")[:-1])
 
 
 async def test_status_products_carry_audience_prices(client, sessionmaker_):

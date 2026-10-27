@@ -23,5 +23,12 @@ def human_duration(seconds) -> str:
     return f"{weeks}w {days % 7}d"
 
 def md_lines(parts: list[str]) -> str:
-    """Join non-empty parts with newlines."""
-    return "\n".join(p for p in parts if p)
+    """Join non-empty parts with markdown hard breaks (two trailing spaces).
+
+    Gotify renders markdown, where a bare newline is a soft break shown as a
+    space, so plain ``\\n`` joins collapse a message into one paragraph."""
+    return "  \n".join(p for p in parts if p)
+
+def md_paragraphs(blocks: list[list[str]]) -> str:
+    """Render each block with ``md_lines`` and separate them by a blank line."""
+    return "\n\n".join(b for b in (md_lines(blk) for blk in blocks) if b)

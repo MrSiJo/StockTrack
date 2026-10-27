@@ -58,7 +58,7 @@ def test_build_digest_lists_cheapest_in_stock_and_changes():
     title, message = build_digest([(w, [p_dear, p_cheap, p_oos])],
                                   [(ev, p_cheap)], MONDAY_10)
     assert "2/3 in stock" in title
-    lines = message.splitlines()
+    lines = [ln.rstrip() for ln in message.splitlines()]
     assert lines[0] == "**Panels**"
     assert "Cheap" in lines[1] and "🏆" in lines[1]   # cheapest first, at its low
     assert "Dear" in lines[2]
